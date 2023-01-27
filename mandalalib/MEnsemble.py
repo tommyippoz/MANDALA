@@ -5,6 +5,8 @@ import numpy
 import pandas
 import sklearn
 
+from mandalalib.utils.MUtils import check_fitted
+
 
 class MEnsemble:
 
@@ -54,7 +56,8 @@ class MEnsemble:
             clf_name = clf.__class__.__name__
             try:
                 start = time.time()
-                clf.fit(train_x, train_y)
+                if not check_fitted(clf):
+                    clf.fit(train_x, train_y)
                 clf_pred = clf.predict_proba(train_x)
             except:
                 print("Execution of learner " + clf_name + " failed")
@@ -155,19 +158,31 @@ class MEnsemble:
         for i in range(0, clf_predictions.shape[1]):
             clf_metrics["clf_" + str(i)] = {}
             clf_metrics["clf_" + str(i)]["matrix"] = sklearn.metrics.confusion_matrix(test_y, clf_predictions[:, i])
-            clf_metrics["clf_" + str(i)]["f1"] = sklearn.metrics.f1_score(test_y, clf_predictions[:, i])
             clf_metrics["clf_" + str(i)]["acc"] = sklearn.metrics.accuracy_score(test_y, clf_predictions[:, i])
             clf_metrics["clf_" + str(i)]["mcc"] = sklearn.metrics.matthews_corrcoef(test_y, clf_predictions[:, i])
         clf_metrics["adj"] = {}
-        clf_metrics["adj"]["matrix"] = sklearn.metrics.confusion_matrix(test_y, adj_scores)
-        clf_metrics["adj"]["f1"] = sklearn.metrics.f1_score(test_y, adj_scores)
+        clf_metrics["adj"]["matrix"] = numpy.asarray(sklearn.metrics.confusion_matrix(test_y, adj_scores)).flatten()
         clf_metrics["adj"]["acc"] = sklearn.metrics.accuracy_score(test_y, adj_scores)
         clf_metrics["adj"]["mcc"] = sklearn.metrics.matthews_corrcoef(test_y, adj_scores)
+        clf_metrics["adj"]["best_base_acc"] = max([clf_metrics[k]["acc"] for k in clf_metrics.keys() if k not in ["adj"]])
+        clf_metrics["adj"]["best_base_mcc"] = max([abs(clf_metrics[k]["mcc"]) for k in clf_metrics.keys() if k not in ["adj"]])
+        clf_metrics["adj"]["acc_gain"] = clf_metrics["adj"]["acc"] - clf_metrics["adj"]["best_base_acc"]
+        clf_metrics["adj"]["mcc_gain"] = abs(clf_metrics["adj"]["mcc"]) - clf_metrics["adj"]["best_base_mcc"]
 
         return metric_scores, clf_metrics
 
     def get_name(self):
-        pass
+        tag = ""
+        for clf in self.classifiers:
+            tag = tag + clf.__class__.__name__[0] + clf.__class__.__name__[-1]
+        tag = self.binary_adjudicator.__class__.__name__ + " [" + str(len(self.classifiers)) + " - " + tag + "]"
+        return tag
+
+    def get_clf_string(self):
+        tag = "["
+        for clf in self.classifiers:
+            tag = tag + clf.__class__.__name__ + ";"
+        return tag[0:-1] + "]"
 
 
 

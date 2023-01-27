@@ -1,105 +1,86 @@
-import numpy
-import pandas
+import sklearn.metrics
 
-import sklearn.model_selection as ms
 from pyod.models.copod import COPOD
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
-from sklearn.ensemble import AdaBoostClassifier
-from sklearn.gaussian_process import GaussianProcessClassifier
-from sklearn.gaussian_process.kernels import RBF
+from sklearn.ensemble import AdaBoostClassifier, RandomForestClassifier
 from sklearn.naive_bayes import GaussianNB
 from sklearn.tree import DecisionTreeClassifier
+from xgboost import XGBClassifier, XGBRFClassifier
 
-from mandalalib.EnsembleMetric import QStatMetric
+from mandalalib.EnsembleMetric import QStatMetric, SigmaMetric, CoupleDisagreementMetric, DisagreementMetric, \
+    SharedFaultMetric
 from mandalalib.MEnsemble import MEnsemble
+from mandalalib.classifiers.MANDALAClassifier import TabNet, FastAI, LogisticReg
+from mandalalib.utils.MUtils import read_csv_dataset, read_csv_binary_dataset
 
 LABEL_NAME = 'multilabel'
-CSV_FILE = "datasets/NSLKDD_Shuffled.csv"
+CSV_FILE = "datasets/AndMal_Shuffled.csv"
+OUTPUT_FILE = "./output/preliminary_outputNKok.csv"
+
+DIVERSITY_METRICS = [QStatMetric(), SigmaMetric(), CoupleDisagreementMetric(), DisagreementMetric(),
+                     SharedFaultMetric()]
 
 
-def read_csv_dataset(dataset_name, label_name=LABEL_NAME, normal_tag="normal", limit=numpy.nan):
-        """
-        Method to process an input dataset as CSV
-        :param normal_tag: tag that identifies normal data
-        :param limit: integer to cut dataset if needed.
-        :param dataset_name: name of the file (CSV) containing the dataset
-        :param label_name: name of the feature containing the label
-        :return: many values for analysis
-        """
-        # Loading Dataset
-        df = pandas.read_csv(dataset_name, sep=",")
+def get_ensembles(set1, set2, set3):
+    e_list = []
+    for c2 in set2:
+        for c3 in set3:
+            for adj in [DecisionTreeClassifier(), LinearDiscriminantAnalysis(),
+                        XGBClassifier(), RandomForestClassifier(n_estimators=10)]:
+                e_list.append(MEnsemble(models_folder="",
+                                        classifiers=[c2, c3],
+                                        diversity_metrics=DIVERSITY_METRICS,
+                                        bin_adj=adj))
+    for c1 in set1:
+        for c2 in set2:
+            for c3 in set3:
+                for adj in [DecisionTreeClassifier(), LinearDiscriminantAnalysis(),
+                            XGBClassifier(), RandomForestClassifier(n_estimators=10)]:
+                    e_list.append(MEnsemble(models_folder="",
+                                            classifiers=[c1, c2, c3],
+                                            diversity_metrics=DIVERSITY_METRICS,
+                                            bin_adj=adj))
 
-        # Shuffle
-        df = df.sample(frac=1.0)
-        df = df.fillna(0)
-        df = df.replace('null', 0)
-
-        # Testing Purposes
-        if (numpy.isfinite(limit)) & (limit < len(df.index)):
-            df = df[0:limit]
-
-        # Binarize label
-        y_enc = numpy.where(df[label_name] == normal_tag, 0, 1)
-
-        # Basic Pre-Processing
-        normal_frame = df.loc[df[label_name] == "normal"]
-        print("\nDataset '" + dataset_name + "' loaded: " + str(len(df.index)) + " items, " + str(
-            len(normal_frame.index)) + " normal and 2 labels")
-        att_perc = (y_enc == 1).sum() / len(y_enc)
-
-        # Train/Test Split of Classifiers
-        x = df.drop(columns=[label_name])
-        x_no_cat = x.select_dtypes(exclude=['object'])
-        feature_list = x_no_cat.columns
-        x_train, x_test, y_train, y_test = ms.train_test_split(x_no_cat, y_enc, test_size=0.5, shuffle=True)
-
-        return x_train, x_test, y_train, y_test, feature_list, att_perc
-
-
-def get_ensembles():
-    return [
-        MEnsemble(models_folder="",
-                  classifiers=[DecisionTreeClassifier(), GaussianNB(), LinearDiscriminantAnalysis()],
-                  diversity_metrics=[QStatMetric()],
-                  bin_adj=LinearDiscriminantAnalysis()),
-        MEnsemble(models_folder="",
-                  classifiers=[DecisionTreeClassifier(), GaussianNB(), LinearDiscriminantAnalysis()],
-                  diversity_metrics=[QStatMetric()],
-                  bin_adj=DecisionTreeClassifier()),
-        MEnsemble(models_folder="",
-                  classifiers=[DecisionTreeClassifier(), LinearDiscriminantAnalysis()],
-                  diversity_metrics=[QStatMetric()],
-                  bin_adj=LinearDiscriminantAnalysis()),
-        MEnsemble(models_folder="",
-                  classifiers=[DecisionTreeClassifier(), LinearDiscriminantAnalysis()],
-                  diversity_metrics=[QStatMetric()],
-                  bin_adj=DecisionTreeClassifier()),
-        MEnsemble(models_folder="",
-                  classifiers=[DecisionTreeClassifier(), AdaBoostClassifier(), LinearDiscriminantAnalysis()],
-                  diversity_metrics=[QStatMetric()],
-                  bin_adj=LinearDiscriminantAnalysis()),
-        MEnsemble(models_folder="",
-                  classifiers=[DecisionTreeClassifier(), AdaBoostClassifier(), LinearDiscriminantAnalysis()],
-                  diversity_metrics=[QStatMetric()],
-                  bin_adj=DecisionTreeClassifier()),
-        MEnsemble(models_folder="",
-                  classifiers=[DecisionTreeClassifier(), COPOD(), LinearDiscriminantAnalysis()],
-                  diversity_metrics=[QStatMetric()],
-                  bin_adj=LinearDiscriminantAnalysis()),
-        MEnsemble(models_folder="",
-                  classifiers=[DecisionTreeClassifier(), COPOD(), LinearDiscriminantAnalysis()],
-                  diversity_metrics=[QStatMetric()],
-                  bin_adj=DecisionTreeClassifier()),
-    ]
+    return e_list
 
 
 if __name__ == '__main__':
 
+    with open(OUTPUT_FILE, 'w') as f:
+        f.write('tag,clfs,')
+        for dm in DIVERSITY_METRICS:
+            f.write(dm.get_name() + ",")
+        f.write('matrix,acc,mcc,best_base_acc,best_base_mcc,acc_gain,mcc_gain,\n')
+
     # Reads CSV Dataset
     x_train, x_test, y_train, y_test, feature_list, att_perc = read_csv_dataset(CSV_FILE)
 
+    # Runs Basic Classifiers
+    b_clfs = []
+    for clf in [GaussianNB(), LinearDiscriminantAnalysis(), DecisionTreeClassifier()]:
+        clf.fit(x_train, y_train)
+        b_clfs.append(clf)
+        y_pred = clf.predict(x_test)
+        print(clf.__class__.__name__ + " Accuracy: " + str(sklearn.metrics.accuracy_score(y_test, y_pred)))
+
+    # Runs Tree-Based Classifiers
+    tb_clfs = []
+    for clf in [XGBClassifier(), RandomForestClassifier()]:
+        clf.fit(x_train, y_train)
+        tb_clfs.append(clf)
+        y_pred = clf.predict(x_test)
+        print(clf.__class__.__name__ + " Accuracy: " + str(sklearn.metrics.accuracy_score(y_test, y_pred)))
+
+    # Runs DL Tabular Classifiers
+    dl_clfs = []
+    for clf in [FastAI(feature_names=feature_list), TabNet()]:
+        clf.fit(x_train, y_train)
+        dl_clfs.append(clf)
+        y_pred = clf.predict(x_test)
+        print(clf.__class__.__name__ + " Accuracy: " + str(sklearn.metrics.accuracy_score(y_test, y_pred)))
+
     # Loops over MEnsembles
-    for m_ens in get_ensembles():
+    for m_ens in get_ensembles(b_clfs, tb_clfs, dl_clfs):
 
         # Exercises the Ensemble
         m_ens.fit(x_train, y_train, verbose=False)
@@ -108,8 +89,13 @@ if __name__ == '__main__':
         # Reports MEnsemble Stats
         metric_scores, clf_metrics = m_ens.report(ens_predictions, clf_predictions, y_test, verbose=False)
 
-        print("Ensemble Accuracy: " + str(clf_metrics["adj"]["acc"]) + " - QStat: " + str(metric_scores["QStat"]))
+        print(m_ens.get_name() + " Accuracy: " + str(clf_metrics["adj"]["acc"]))
 
-
-
-
+        # Logging to file
+        with open(OUTPUT_FILE, 'a') as f:
+            f.write(m_ens.get_name() + "," + m_ens.get_clf_string() + ",")
+            for met in metric_scores.keys():
+                f.write(str(metric_scores[met]) + ",")
+            for met in clf_metrics["adj"].keys():
+                f.write(str(clf_metrics["adj"][met]) + ",")
+            f.write('\n')
