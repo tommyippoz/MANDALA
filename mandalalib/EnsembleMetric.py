@@ -154,7 +154,7 @@ class SharedFaultMetric(EnsembleMetric):
         """
         comp_array = [False for i in range(0, clf_predictions.shape[1])]
         clf_hits = numpy.asarray([(clf_predictions[:, i] == test_y) for i in range(0, clf_predictions.shape[1])]).transpose()
-        shared_faults = [(clf_hits[i, :] == comp_array)[0] for i in range(0, clf_predictions.shape[0])]
+        shared_faults = numpy.asarray([numpy.all(clf_hits[i, :] == comp_array) for i in range(0, clf_predictions.shape[0])])
         return sum(shared_faults)
 
     def get_name(self):

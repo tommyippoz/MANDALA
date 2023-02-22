@@ -1,7 +1,10 @@
+import copy
+
 import numpy
 import numpy as np
 import pandas
 import pandas as pd
+import sklearn.metrics
 from autogluon.tabular import TabularPredictor
 from pytorch_tabnet.tab_model import TabNetClassifier
 from sklearn.linear_model import LogisticRegression
@@ -29,7 +32,7 @@ class MANDALAClassifier:
         self.X_ = None
         self.y_ = None
 
-    def fit(self, x_train, y_train):
+    def fit(self, x_train, y_train=None):
         """
         Fits a Classifier
         :param x_train: feature set
@@ -62,7 +65,11 @@ class MANDALAClassifier:
         Method to compute predict of a classifier
         :return: array of predicted class
         """
-        return self.model.predict(x_test)
+        if isinstance(x_test, pandas.DataFrame):
+            x_t = x_test.to_numpy()
+        else:
+            x_t = x_test
+        return self.model.predict(x_t)
 
     def predict_proba(self, x_test):
         """
@@ -104,8 +111,17 @@ class UnsupervisedClassifier(MANDALAClassifier):
     def __init__(self, classifier):
         MANDALAClassifier.__init__(self, classifier)
         self.name = classifier.__class__.__name__
+        self.revert = False
 
-    def predict_proba(self, test_features):
+    def fit(self, x_train, y_train):
+        super().fit(x_train)
+        y_pred = self.predict(x_train)
+        train_acc = sklearn.metrics.accuracy_score(y_train, y_pred)
+        if train_acc < 0.5:
+            self.revert = True
+
+    def predict_proba(self, x_test):
+        test_features = x_test.to_numpy() if isinstance(x_test, pandas.DataFrame) else x_test
         proba = self.model.predict_proba(test_features)
         pred = self.model.predict(test_features)
         for i in range(len(pred)):
@@ -113,7 +129,15 @@ class UnsupervisedClassifier(MANDALAClassifier):
             max_p = max(proba[i])
             proba[i][pred[i]] = max_p
             proba[i][1 - pred[i]] = min_p
+        if self.revert:
+            proba[:] = proba[:, [1, 0]]
         return proba
+
+    def predict(self, x_test):
+        y_pred = super().predict(x_test)
+        if self.revert:
+            y_pred = abs(1-y_pred)
+        return y_pred
 
     def predict_confidence(self, x_test):
         """
@@ -163,8 +187,10 @@ class TabNet(MANDALAClassifier):
 
     def fit(self, x_train, y_train):
         if isinstance(x_train, pandas.DataFrame):
-            x_train = x_train.to_numpy()
-        self.model.fit(X_train=x_train, y_train=y_train, max_epochs=self.epochs,
+            x_t = x_train.to_numpy()
+        else:
+            x_t = copy.deepcopy(x_train)
+        self.model.fit(X_train=x_t, y_train=y_train, max_epochs=self.epochs,
                        batch_size=self.bsize, eval_metric=[self.metric], patience=self.patience)
         self.classes_ = numpy.unique(y_train)
         self.feature_importances_ = self.compute_feature_importances()
@@ -172,13 +198,17 @@ class TabNet(MANDALAClassifier):
 
     def predict(self, x_test):
         if isinstance(x_test, pandas.DataFrame):
-            x_test = x_test.to_numpy()
-        return self.model.predict(x_test)
+            x_t = x_test.to_numpy()
+        else:
+            x_t = copy.deepcopy(x_test)
+        return self.model.predict(x_t)
 
     def predict_proba(self, x_test):
         if isinstance(x_test, pandas.DataFrame):
-            x_test = x_test.to_numpy()
-        return self.model.predict_proba(x_test)
+            x_t = x_test.to_numpy()
+        else:
+            x_t = copy.deepcopy(x_test)
+        return self.model.predict_proba(x_t)
 
     def classifier_name(self):
         return "TabNet(" + str(self.epochs) + "-" + str(self.bsize) + "-" + str(self.patience) + ")"
@@ -199,15 +229,18 @@ class AutoGluon(MANDALAClassifier):
     ‘FASTAI’ (neural network with FastAI backend)
     """
 
-    def __init__(self, feature_names, label_name, clf_name, metric, verbose=0):
+    def __init__(self, label_name, clf_name, metric, verbose=0):
         MANDALAClassifier.__init__(self, TabularPredictor(label=label_name, eval_metric=metric, verbosity=verbose))
         self.label_name = label_name
-        self.feature_names = feature_names
         self.clf_name = clf_name
         self.feature_importance = []
 
     def fit(self, x_train, y_train):
-        df = pd.DataFrame(data=x_train.copy(), columns=self.feature_names)
+        self.feature_names = ["f" + str(i) for i in range(0, x_train.shape[1])]
+        if isinstance(x_train, pd.DataFrame):
+            df = pd.DataFrame(data=copy.deepcopy(x_train.values), columns=self.feature_names)
+        else:
+            df = pd.DataFrame(data=copy.deepcopy(x_train), columns=self.feature_names)
         df[self.label_name] = y_train
         self.model.fit(train_data=df, hyperparameters={self.clf_name: {}})
         self.feature_importance = self.model.feature_importance(df)
@@ -225,11 +258,17 @@ class AutoGluon(MANDALAClassifier):
         return np.asarray(importances)
 
     def predict(self, x_test):
-        df = pd.DataFrame(data=x_test, columns=self.feature_names)
+        if isinstance(x_test, pd.DataFrame):
+            df = pd.DataFrame(data=x_test.to_numpy(), columns=self.feature_names)
+        else:
+            df = pd.DataFrame(data=x_test, columns=self.feature_names)
         return self.model.predict(df, as_pandas=False)
 
     def predict_proba(self, x_test):
-        df = pd.DataFrame(data=x_test, columns=self.feature_names)
+        if isinstance(x_test, pd.DataFrame):
+            df = pd.DataFrame(data=x_test.to_numpy(), columns=self.feature_names)
+        else:
+            df = pd.DataFrame(data=x_test, columns=self.feature_names)
         return self.model.predict_proba(df, as_pandas=False)
 
     def classifier_name(self):
@@ -241,8 +280,8 @@ class FastAI(AutoGluon):
     Wrapper for the gluon.FastAI algorithm
     """
 
-    def __init__(self, feature_names, label_name="multilabel", metric="mcc", verbose=0):
-        AutoGluon.__init__(self, feature_names, label_name, "FASTAI", metric, verbose)
+    def __init__(self, label_name="multilabel", metric="mcc", verbose=0):
+        AutoGluon.__init__(self, label_name, "FASTAI", metric, verbose)
 
     def classifier_name(self):
         return "FastAI"
@@ -300,3 +339,4 @@ class LogisticReg(MANDALAClassifier):
 
     def classifier_name(self):
         return "LogisticRegression"
+

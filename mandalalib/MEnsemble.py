@@ -5,7 +5,7 @@ import numpy
 import pandas
 import sklearn
 
-from mandalalib.utils.MUtils import check_fitted
+from mandalalib.utils.MUtils import check_fitted, get_clf_name, compute_feature_importances
 
 
 class MEnsemble:
@@ -22,6 +22,7 @@ class MEnsemble:
         self.models_folder = models_folder
         self.adj_data = {"train": {}, "test": {}}
         self.binary_adjudicator = bin_adj
+        self.train_classes = 0
 
     def add_classifier(self, clf):
         """
@@ -52,32 +53,31 @@ class MEnsemble:
 
         adj_data = []
         adj_features = []
+        self.train_classes = len(numpy.unique(train_y))
         for clf in self.classifiers:
-            clf_name = clf.__class__.__name__
-            try:
-                start = time.time()
-                if not check_fitted(clf):
-                    clf.fit(train_x, train_y)
-                clf_pred = clf.predict_proba(train_x)
-            except:
-                print("Execution of learner " + clf_name + " failed")
-                clf_pred = numpy.full((len(train_y), 2), 0.5)
+            clf_name = get_clf_name(clf)
+            #try:
+            start = time.time()
+            if not check_fitted(clf):
+                clf.fit(train_x, train_y)
+                if verbose:
+                    print("Training of classifier '" + clf_name + "' completed in " +
+                          str(time.time() - start) + " seconds")
+            clf_pred = clf.predict_proba(train_x)
+            #except:
+            #    print("Execution of learner " + clf_name + " failed")
+            #    clf_pred = numpy.full((len(train_y), self.train_classes), 1.0/self.train_classes)
 
             adj_data.append(clf_pred)
-            bin_pred = [[0 if clf_pred[i][0] >= clf_pred[i][1] else 1]
-                             for i in range(len(clf_pred))]
-            adj_data.append(bin_pred)
-            adj_features.extend([clf_name + "_normal",
-                                 clf_name + "_anomaly",
-                                 clf_name + "_label"])
-            if verbose:
-                print("Training of classifier '" + clf_name + "' completed in " +
-                      str(time.time() - start) + " seconds, train accuracy " +
-                      str(sklearn.metrics.accuracy_score(train_y, bin_pred)))
+            class_pred = numpy.argmax(clf_pred, axis=1)
+            adj_data.append(class_pred)
+            adj_features.extend([clf_name + "_p_c" + str(i) for i in range(0, self.train_classes)])
+            adj_features.extend([clf_name + "_label"])
+
 
         # Cleans up and unifies the dataset of predictions
-        adj_data = numpy.concatenate(adj_data, axis=1)
-        adj_data = numpy.nan_to_num(adj_data, nan=-0.5, posinf=0.5, neginf=0.5)
+        adj_data = numpy.column_stack(adj_data)
+        adj_data = numpy.nan_to_num(adj_data, nan=-1.0/self.train_classes, posinf=1.0/self.train_classes, neginf=1.0/self.train_classes)
 
         if self.use_training:
             adj_data = numpy.concatenate([train_x, adj_data], axis=1)
@@ -88,7 +88,7 @@ class MEnsemble:
             self.binary_adjudicator.fit(adj_data, train_y)
             adj_pred = self.binary_adjudicator.predict(adj_data)
             if verbose:
-                print("Training of adjudicator '" + self.binary_adjudicator.__class__.__name__ +
+                print("Training of adjudicator '" + get_clf_name(self.binary_adjudicator) +
                       "' completed in " + str(time.time() - start) + " seconds, train accuracy " +
                       str(sklearn.metrics.accuracy_score(train_y, adj_pred)))
 
@@ -109,24 +109,23 @@ class MEnsemble:
         clf_predictions = []
 
         for clf in self.classifiers:
-            clf_name = clf.__class__.__name__
+            clf_name = get_clf_name(clf)
             try:
                 start = time.time()
                 clf_pred = clf.predict_proba(test_x)
             except:
                 print("Execution of learner " + clf_name + " failed")
-                clf_pred = numpy.full((test_x.shape[0], 2), 0.5)
+                clf_pred = numpy.full((test_x.shape[0], self.train_classes), 1.0/self.train_classes)
 
             adj_data.append(clf_pred)
-            bin_pred = [[0 if clf_pred[i][0] >= clf_pred[i][1] else 1]
-                        for i in range(len(clf_pred))]
-            adj_data.append(bin_pred)
-            clf_predictions.append(bin_pred)
+            class_pred = numpy.argmax(clf_pred, axis=1)
+            adj_data.append(class_pred)
+            clf_predictions.append(class_pred)
 
         # Cleans up and unifies the dataset of predictions
-        adj_data = numpy.concatenate(adj_data, axis=1)
-        adj_data = numpy.nan_to_num(adj_data, nan=-0.5, posinf=0.5, neginf=0.5)
-        clf_predictions = numpy.concatenate(clf_predictions, axis=1)
+        adj_data = numpy.column_stack(adj_data)
+        adj_data = numpy.nan_to_num(adj_data, nan=-1.0/self.train_classes, posinf=1.0/self.train_classes, neginf=1.0/self.train_classes)
+        clf_predictions = numpy.column_stack(clf_predictions)
         clf_predictions = numpy.nan_to_num(clf_predictions, nan=-0, posinf=0, neginf=0)
 
         if self.use_training:
@@ -159,11 +158,15 @@ class MEnsemble:
             clf_metrics["clf_" + str(i)] = {}
             clf_metrics["clf_" + str(i)]["matrix"] = sklearn.metrics.confusion_matrix(test_y, clf_predictions[:, i])
             clf_metrics["clf_" + str(i)]["acc"] = sklearn.metrics.accuracy_score(test_y, clf_predictions[:, i])
+            clf_metrics["clf_" + str(i)]["b_acc"] = sklearn.metrics.balanced_accuracy_score(test_y, clf_predictions[:, i])
             clf_metrics["clf_" + str(i)]["mcc"] = sklearn.metrics.matthews_corrcoef(test_y, clf_predictions[:, i])
+            clf_metrics["clf_" + str(i)]["logloss"] = sklearn.metrics.log_loss(test_y, clf_predictions[:, i])
         clf_metrics["adj"] = {}
         clf_metrics["adj"]["matrix"] = numpy.asarray(sklearn.metrics.confusion_matrix(test_y, adj_scores)).flatten()
         clf_metrics["adj"]["acc"] = sklearn.metrics.accuracy_score(test_y, adj_scores)
+        clf_metrics["adj"]["b_acc"] = sklearn.metrics.balanced_accuracy_score(test_y, adj_scores)
         clf_metrics["adj"]["mcc"] = sklearn.metrics.matthews_corrcoef(test_y, adj_scores)
+        clf_metrics["adj"]["logloss"] = sklearn.metrics.log_loss(test_y, adj_scores)
         clf_metrics["adj"]["best_base_acc"] = max([clf_metrics[k]["acc"] for k in clf_metrics.keys() if k not in ["adj"]])
         clf_metrics["adj"]["best_base_mcc"] = max([abs(clf_metrics[k]["mcc"]) for k in clf_metrics.keys() if k not in ["adj"]])
         clf_metrics["adj"]["acc_gain"] = clf_metrics["adj"]["acc"] - clf_metrics["adj"]["best_base_acc"]
@@ -174,15 +177,21 @@ class MEnsemble:
     def get_name(self):
         tag = ""
         for clf in self.classifiers:
-            tag = tag + clf.__class__.__name__[0] + clf.__class__.__name__[-1]
-        tag = self.binary_adjudicator.__class__.__name__ + " [" + str(len(self.classifiers)) + " - " + tag + "]"
+            tag = tag + get_clf_name(clf)[0] + get_clf_name(clf)[-1]
+        tag = get_clf_name(self.binary_adjudicator) + " [" + str(len(self.classifiers)) + " - " + tag + "]"
+        if self.use_training:
+            tag = tag + "@full"
+        else:
+            tag = tag + "@nodataset"
         return tag
 
     def get_clf_string(self):
         tag = "["
         for clf in self.classifiers:
-            tag = tag + clf.__class__.__name__ + ";"
+            tag = tag + get_clf_name(clf) + ";"
         return tag[0:-1] + "]"
 
-
+    def feature_importance(self):
+        fi = numpy.asarray(compute_feature_importances(self.binary_adjudicator))
+        return fi/sum(fi)
 

@@ -7,7 +7,7 @@ import sklearn
 from mandalalib.classifiers.MANDALAClassifier import MANDALAClassifier
 
 
-def read_csv_dataset(dataset_name, label_name="multilabel", normal_tag="normal", limit=numpy.nan):
+def read_csv_dataset(dataset_name, label_name="multilabel", limit=numpy.nan, split=True):
     """
     Method to process an input dataset as CSV
     :param normal_tag: tag that identifies normal data
@@ -28,9 +28,12 @@ def read_csv_dataset(dataset_name, label_name="multilabel", normal_tag="normal",
     if (numpy.isfinite(limit)) & (limit < len(df.index)):
         df = df[0:limit]
 
-    encoding = pandas.factorize(df[label_name])
-    y_enc = encoding[0]
-    labels = encoding[1]
+    if split:
+        encoding = pandas.factorize(df[label_name])
+        y_enc = encoding[0]
+        labels = encoding[1]
+    else:
+        y_enc = df[label_name]
 
     # Basic Pre-Processing
     normal_frame = df.loc[df[label_name] == "normal"]
@@ -41,12 +44,15 @@ def read_csv_dataset(dataset_name, label_name="multilabel", normal_tag="normal",
     x = df.drop(columns=[label_name])
     x_no_cat = x.select_dtypes(exclude=['object'])
     feature_list = x_no_cat.columns
-    x_train, x_test, y_train, y_test = sklearn.model_selection.train_test_split(x_no_cat, y_enc, test_size=0.5, shuffle=True)
 
-    return x_train, x_test, y_train, y_test, feature_list, numpy.NaN
+    if split:
+        x_train, x_test, y_train, y_test = sklearn.model_selection.train_test_split(x_no_cat, y_enc, test_size=0.5, shuffle=True)
+        return x_train, x_test, y_train, y_test, feature_list, numpy.NaN
+    else:
+        return x_no_cat, y_enc, feature_list, numpy.NaN
 
 
-def read_csv_binary_dataset(dataset_name, label_name="multilabel", normal_tag="normal", limit=numpy.nan):
+def read_csv_binary_dataset(dataset_name, label_name="multilabel", normal_tag="normal", limit=numpy.nan, split=True):
     """
     Method to process an input dataset as CSV
     :param normal_tag: tag that identifies normal data
@@ -68,7 +74,10 @@ def read_csv_binary_dataset(dataset_name, label_name="multilabel", normal_tag="n
         df = df[0:limit]
 
     # Binarize label
-    y_enc = numpy.where(df[label_name] == normal_tag, 0, 1)
+    if split:
+        y_enc = numpy.where(df[label_name] == normal_tag, 0, 1)
+    else:
+        y_enc = df[label_name]
 
     # Basic Pre-Processing
     normal_frame = df.loc[df[label_name] == "normal"]
@@ -80,9 +89,12 @@ def read_csv_binary_dataset(dataset_name, label_name="multilabel", normal_tag="n
     x = df.drop(columns=[label_name])
     x_no_cat = x.select_dtypes(exclude=['object'])
     feature_list = x_no_cat.columns
-    x_train, x_test, y_train, y_test = sklearn.model_selection.train_test_split(x_no_cat, y_enc, test_size=0.5, shuffle=True)
 
-    return x_train, x_test, y_train, y_test, feature_list, att_perc
+    if split:
+        x_train, x_test, y_train, y_test = sklearn.model_selection.train_test_split(x_no_cat, y_enc, test_size=0.5, shuffle=True)
+        return x_train, x_test, y_train, y_test, feature_list, att_perc
+    else:
+        return x_no_cat, y_enc, feature_list, att_perc
 
 
 def current_ms():
@@ -163,3 +175,24 @@ def check_fitted(clf):
         return True
     else:
         return False
+
+
+def get_clf_name(clf):
+    if hasattr(clf, "classifier_name"):
+        return clf.classifier_name()
+    else:
+        return clf.__class__.__name__
+
+
+def compute_feature_importances(clf):
+    """
+    Outputs feature ranking in building a Classifier
+    :return: ndarray containing feature ranks
+    """
+    if hasattr(clf, 'feature_importances_'):
+        return clf.feature_importances_
+    elif hasattr(clf, 'coef_'):
+        return numpy.sum(numpy.absolute(clf.coef_), axis=0)
+    elif isinstance(clf, MANDALAClassifier):
+        return clf.compute_feature_importances()
+    return []
