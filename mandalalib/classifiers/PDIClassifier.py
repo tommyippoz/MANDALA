@@ -79,7 +79,8 @@ class PDIClassifier(MANDALAClassifier):
         return dataset
 
     def predict(self, x_test):
-        return numpy.argmax(self.predict_proba(x_test), axis=1)
+        pp = self.predict_proba(x_test)
+        return numpy.argmax(pp, axis=1)
 
     def predict_proba(self, x_test):
         if isinstance(x_test, pandas.DataFrame):
