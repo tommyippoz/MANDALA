@@ -25,8 +25,8 @@ from mandalalib.utils.MUtils import read_csv_dataset, read_csv_binary_dataset, g
     get_classifier_name
 
 LABEL_NAME = 'label'
-CSV_FOLDER = "split_binary_datasets"
-OUTPUT_FOLDER = "./output/bindatasets"
+CSV_FOLDER = "split_binary_datasets_other"
+OUTPUT_FOLDER = "./output/aaa"
 
 DIVERSITY_METRICS = [QStatMetric(), SigmaMetric(), CoupleDisagreementMetric(), DisagreementMetric(),
                      SharedFaultMetric()]
@@ -80,38 +80,25 @@ def get_ensembles(set1, set2, set3, cont):
     return e_list
 
 
-def entropy(labels, base=None):
-    """ Computes entropy of label distribution. """
-
-    n_labels = len(labels)
-
-    if n_labels <= 1:
-        return 0
-
-    value, counts = numpy.unique(labels, return_counts=True)
-    probs = counts / n_labels
-    n_classes = numpy.count_nonzero(probs)
-
-    if n_classes <= 1:
-        return 0
-
-    ent = 0.
-
-    # Compute entropy
-    base = e if base is None else base
-    for i in probs:
-        ent -= i * log(i, base)
-
-    return ent
+def entropy(probs):
+    norm_array = numpy.full(probs.shape[1], 1 / probs.shape[1])
+    normalization = (-norm_array * numpy.log2(norm_array)).sum()
+    ent = []
+    for i in range(0, probs.shape[0]):
+        val = numpy.delete(probs[i], numpy.where(probs[i] == 0))
+        p = val / val.sum()
+        ent.append(1 - (normalization - (-p * numpy.log2(p)).sum()) / normalization)
+    return numpy.asarray(ent)
 
 
 def print_predictions(dataset_x, dataset_y, algs, predictions, filename, tag):
     full_predictions = dataset_x
+    full_predictions.columns = ["dataset_" + f for f in full_predictions.columns]
     full_predictions["label"] = dataset_y
     for i in range(0, len(algs)):
         preds = predictions[i]
         full_predictions[algs[i] + "_pred"] = numpy.argmax(preds, axis=1)
-        full_predictions[algs[i] + "_maxprob"] = numpy.max(preds, axis=0)
+        full_predictions[algs[i] + "_maxprob"] = numpy.max(preds, axis=1)
         full_predictions[algs[i] + "_entropy"] = entropy(preds)
 
     full_predictions.to_csv(filename + "_baselearners_" + tag + ".csv", index=False)
@@ -132,11 +119,9 @@ if __name__ == '__main__':
 
         # Reads CSV Dataset
         x_train, y_train, feature_list, att_perc = \
-            read_csv_dataset(os.path.join(CSV_FOLDER, dataset + "_train.csv"), label_name=LABEL_NAME, split=False,
-                             limit=5000)
+            read_csv_dataset(os.path.join(CSV_FOLDER, dataset + "_train.csv"), label_name=LABEL_NAME, split=False)
         x_test, y_test, feature_list, att_perc = \
-            read_csv_dataset(os.path.join(CSV_FOLDER, dataset + "_test.csv"), label_name=LABEL_NAME, split=False,
-                             limit=5000)
+            read_csv_dataset(os.path.join(CSV_FOLDER, dataset + "_test.csv"), label_name=LABEL_NAME, split=False)
 
         algs = []
         tr_preds = []
@@ -190,5 +175,5 @@ if __name__ == '__main__':
             print(get_clf_name(clf) + " Accuracy: " + str(sklearn.metrics.accuracy_score(y_test, y_pred))
                   + " Train time: " + str(current_ms() - start_time) + " ms")
 
-        print_predictions(x_train, y_train, algs, tr_preds, file, "train")
-        print_predictions(x_test, y_test, algs, te_preds, file, "test")
+        print_predictions(x_train, y_train, algs, tr_preds, os.path.join(OUTPUT_FOLDER, dataset), "train")
+        print_predictions(x_test, y_test, algs, te_preds, os.path.join(OUTPUT_FOLDER, dataset), "test")
