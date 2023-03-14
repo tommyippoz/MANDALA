@@ -7,7 +7,7 @@ import sklearn
 from mandalalib.classifiers.MANDALAClassifier import MANDALAClassifier
 
 
-def read_csv_dataset(dataset_name, label_name="multilabel", limit=numpy.nan, split=True):
+def read_csv_dataset(dataset_name, label_name="multilabel", limit=numpy.nan, split=True, shuffle=True):
     """
     Method to process an input dataset as CSV
     :param normal_tag: tag that identifies normal data
@@ -20,7 +20,8 @@ def read_csv_dataset(dataset_name, label_name="multilabel", limit=numpy.nan, spl
     df = pandas.read_csv(dataset_name, sep=",")
 
     # Shuffle
-    df = df.sample(frac=1.0)
+    if shuffle:
+        df = df.sample(frac=1.0)
     df = df.fillna(0)
     df = df.replace('null', 0)
     df = df[df.columns[df.nunique() > 1]]

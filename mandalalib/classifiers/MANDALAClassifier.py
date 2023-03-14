@@ -12,6 +12,31 @@ from sklearn.neighbors import KNeighborsClassifier
 from xgboost import XGBClassifier
 
 
+from pytorch_tabnet.metrics import Metric
+
+
+class MCCTabNet(Metric):
+    def __init__(self):
+        self._name = "mcc_tabnet"
+        self._maximize = True
+
+    def __call__(self, y_true, y_score):
+        y_pred = numpy.argmax(y_score, axis=1)
+        mcc = sklearn.metrics.matthews_corrcoef(y_true, y_pred)
+        return mcc
+
+
+class RecallTabNet(Metric):
+    def __init__(self):
+        self._name = "rec_tabnet"
+        self._maximize = True
+
+    def __call__(self, y_true, y_score):
+        y_pred = numpy.argmax(y_score, axis=1)
+        mcc = sklearn.metrics.recall_score(y_true, y_pred)
+        return mcc
+
+
 class MANDALAClassifier:
     """
     Basic Abstract Class for Classifiers.
@@ -178,20 +203,25 @@ class TabNet(MANDALAClassifier):
     Wrapper for the torch.tabnet algorithm
     """
 
-    def __init__(self, metric=None, epochs=10, bsize=1024, patience=2, verbose=0):
+    def __init__(self, metric=MCCTabNet, epochs=10, bsize=1024, patience=2, verbose=0):
         MANDALAClassifier.__init__(self, TabNetClassifier(verbose=verbose))
         self.epochs = epochs
         self.bsize = bsize
         self.patience = patience
         self.metric = metric if metric is not None else 'auc'
+        if self.metric == 'mcc':
+            self.metric = MCCTabNet
+        elif self.metric == 'recall':
+            self.metric = RecallTabNet
 
     def fit(self, x_train, y_train):
         if isinstance(x_train, pandas.DataFrame):
             x_t = x_train.to_numpy()
         else:
             x_t = copy.deepcopy(x_train)
-        self.model.fit(X_train=x_t, y_train=y_train, max_epochs=self.epochs,
-                       batch_size=self.bsize, eval_metric=[self.metric], patience=self.patience)
+        xtr, xva, ytr, yva = sklearn.model_selection.train_test_split(x_t, y_train, test_size=0.2)
+        self.model.fit(X_train=xtr, y_train=ytr, max_epochs=self.epochs, eval_set=[[xva, yva]],
+                       batch_size=self.bsize, eval_metric=['logloss', self.metric], patience=self.patience)
         self.classes_ = numpy.unique(y_train)
         self.feature_importances_ = self.compute_feature_importances()
         self.trained = True
@@ -280,7 +310,7 @@ class FastAI(AutoGluon):
     Wrapper for the gluon.FastAI algorithm
     """
 
-    def __init__(self, label_name="multilabel", metric="mcc", verbose=0):
+    def __init__(self, label_name="label", metric="accuracy", verbose=0):
         AutoGluon.__init__(self, label_name, "FASTAI", metric, verbose)
 
     def classifier_name(self):
