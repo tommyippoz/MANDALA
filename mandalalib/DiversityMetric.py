@@ -1,5 +1,6 @@
 import math
 
+import numpy
 import scipy
 import sklearn
 
@@ -36,7 +37,7 @@ class DiversityMetric:
         n11 = sum((pred1 == test_y) * (pred2 == test_y))
         n10 = sum((pred1 == test_y) * (pred2 != test_y))
         n01 = sum((pred1 != test_y) * (pred2 == test_y))
-        n00 = sum((pred1 != test_y) * (pred2 != test_y))
+        n00 = len(test_y)-n01-n10-n11
         if rel:
             n11 = 1.0*n11/len(test_y)
             n10 = 1.0*n10/len(test_y)
