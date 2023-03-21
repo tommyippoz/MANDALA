@@ -1,6 +1,7 @@
 import copy
 
 import keras
+
 import numpy
 import pandas
 import pyDeepInsight
@@ -15,6 +16,7 @@ class PDIClassifier(MANDALAClassifier):
     """
 
     def __init__(self, n_classes, img_size=70, pdi_strategy='tsne', epochs=50, bsize=1024, val_split=0.2, verbose=2):
+        self.checkpoint_filepath = "./keras_tmp/checkpoint"
         self.img_t = None
         self.img_size = img_size
         self.pdi_strategy = pdi_strategy
@@ -32,13 +34,17 @@ class PDIClassifier(MANDALAClassifier):
                 keras.layers.Flatten(),
                 keras.layers.Dropout(0.2),
                 keras.layers.Dense(img_size, activation='relu'),
-                keras.layers.Dense(int(img_size/2.0), activation='relu'),
+                keras.layers.Dropout(0.2),
+                keras.layers.Dense(int(img_size/2), activation='relu'),
+                keras.layers.Dropout(0.2),
+                keras.layers.Dense(int(img_size/4), activation='relu'),
+                keras.layers.Dropout(0.2),
                 keras.layers.Dense(n_classes, activation='softmax')
             ]
         )
         model.compile(
             optimizer='adam', loss="binary_crossentropy", metrics=[
-                keras.metrics.Accuracy(name="accuracy"),
+                keras.metrics.BinaryAccuracy(name="acc"),
                 keras.metrics.AUC(name="auc")
             ]
         )
@@ -53,11 +59,21 @@ class PDIClassifier(MANDALAClassifier):
 
         x_t = self.normalize_and_transform(x_t, compute_stats=True)
         train_targets_cat = to_categorical(y_train, num_classes=len(self.classes_))
+
+        model_checkpoint_callback = keras.callbacks.ModelCheckpoint(
+            filepath=self.checkpoint_filepath,
+            save_weights_only=True,
+            monitor='val_acc',
+            mode='max',
+            save_best_only=True)
+
         self.model.fit(x_t, train_targets_cat,
                        batch_size=self.bsize,
                        epochs=self.epochs,
                        verbose=self.verbose,
-                       validation_split=self.val_split)
+                       validation_split=self.val_split,
+                       callbacks=[model_checkpoint_callback])
+        self.model.load_weights(self.checkpoint_filepath)
 
         self.feature_importances_ = self.compute_feature_importances()
         self.trained = True
@@ -67,6 +83,7 @@ class PDIClassifier(MANDALAClassifier):
         if compute_stats or self.norm_stats["train_avg"] is None:
             self.norm_stats = {"train_avg": numpy.mean(dataset, axis=0),
                                "train_std": numpy.std(dataset, axis=0)}
+            self.norm_stats["train_std"][self.norm_stats["train_std"] == 0.0] = 1
         dataset -= self.norm_stats["train_avg"]
         dataset /= self.norm_stats["train_std"]
         if self.img_t is None:

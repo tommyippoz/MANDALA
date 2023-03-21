@@ -14,6 +14,7 @@ class KerasClassifier(MANDALAClassifier):
     """
 
     def __init__(self, n_features, n_classes, epochs=50, bsize=1024, val_split=0.2, verbose=2):
+        self.checkpoint_filepath = "./keras_tmp/checkpoint"
         self.epochs = epochs
         self.bsize = bsize
         self.verbose = verbose
@@ -24,16 +25,18 @@ class KerasClassifier(MANDALAClassifier):
                 keras.layers.Dense(
                     256, activation="relu", input_shape=(n_features,)
                 ),
-                keras.layers.Dense(256, activation="relu"),
                 keras.layers.Dropout(0.3),
-                keras.layers.Dense(256, activation="relu"),
+                keras.layers.Dense(128, activation="relu"),
                 keras.layers.Dropout(0.3),
+                keras.layers.Dense(32, activation="relu"),
+                keras.layers.Dropout(0.3),
+                keras.layers.Dense(8, activation="relu"),
                 keras.layers.Dense(n_classes, activation="sigmoid"),
             ]
         )
         model.compile(
             optimizer='adam', loss="binary_crossentropy", metrics=[
-                keras.metrics.Accuracy(name="accuracy"),
+                keras.metrics.Accuracy(name="acc"),
                 keras.metrics.AUC(name="auc")
             ]
         )
@@ -48,11 +51,21 @@ class KerasClassifier(MANDALAClassifier):
 
         x_t = self.normalize(x_t, compute_stats=True)
         train_targets_cat = to_categorical(y_train, num_classes=len(self.classes_))
+
+        model_checkpoint_callback = keras.callbacks.ModelCheckpoint(
+            filepath=self.checkpoint_filepath,
+            save_weights_only=True,
+            monitor='val_acc',
+            mode='max',
+            save_best_only=True)
+
         self.model.fit(x_t, train_targets_cat,
                        batch_size=self.bsize,
                        epochs=self.epochs,
                        verbose=self.verbose,
-                       validation_split=self.val_split)
+                       validation_split=self.val_split,
+                       callbacks=[model_checkpoint_callback])
+        self.model.load_weights(self.checkpoint_filepath)
 
         self.feature_importances_ = self.compute_feature_importances()
         self.trained = True

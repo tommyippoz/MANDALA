@@ -20,52 +20,25 @@ from xgboost import XGBClassifier, XGBRFClassifier
 from mandalalib.EnsembleMetric import QStatMetric, SigmaMetric, CoupleDisagreementMetric, DisagreementMetric, \
     SharedFaultMetric
 from mandalalib.MEnsemble import MEnsemble
+from mandalalib.classifiers.KerasClassifier import KerasClassifier
 from mandalalib.classifiers.MANDALAClassifier import TabNet, FastAI, LogisticReg, UnsupervisedClassifier, XGB
+from mandalalib.classifiers.PDIClassifier import PDIClassifier
+from mandalalib.classifiers.PDITLClassifier import PDITLClassifier
 from mandalalib.utils.MUtils import read_csv_dataset, read_csv_binary_dataset, get_clf_name, current_ms, \
     get_classifier_name
 
 LABEL_NAME = 'label'
-CSV_FOLDER = "split_binary_datasets_other"
-OUTPUT_FOLDER = "./output/aaa"
+CSV_FOLDER = "split_binary_datasets"
+OUTPUT_FOLDER = "./output/"
 
 DIVERSITY_METRICS = [QStatMetric(), SigmaMetric(), CoupleDisagreementMetric(), DisagreementMetric(),
                      SharedFaultMetric()]
 
 
-def get_ensembles(set1, set2, set3, cont):
+def get_ensembles(set1, set2, set3):
     e_list = []
     stackers = [DecisionTreeClassifier(), LinearDiscriminantAnalysis(),
                 RandomForestClassifier(n_estimators=10), XGB(n_trees=10)]
-    for ut in [False, True]:
-        for adj in stackers:
-            e_list.append(MEnsemble(models_folder="",
-                                    classifiers=set1,
-                                    diversity_metrics=DIVERSITY_METRICS,
-                                    bin_adj=adj,
-                                    use_training=ut))
-    for ut in [False, True]:
-        for adj in stackers:
-            e_list.append(MEnsemble(models_folder="",
-                                    classifiers=set2,
-                                    diversity_metrics=DIVERSITY_METRICS,
-                                    bin_adj=adj,
-                                    use_training=ut))
-    for ut in [False, True]:
-        for adj in stackers:
-            e_list.append(MEnsemble(models_folder="",
-                                    classifiers=set3,
-                                    diversity_metrics=DIVERSITY_METRICS,
-                                    bin_adj=adj,
-                                    use_training=ut))
-    for c2 in set2:
-        for c3 in set3:
-            for ut in [False, True]:
-                for adj in stackers:
-                    e_list.append(MEnsemble(models_folder="",
-                                            classifiers=[c2, c3],
-                                            diversity_metrics=DIVERSITY_METRICS,
-                                            bin_adj=adj,
-                                            use_training=ut))
     for c1 in set1:
         for c2 in set2:
             for c3 in set3:
@@ -119,22 +92,61 @@ if __name__ == '__main__':
 
         # Reads CSV Dataset
         x_train, y_train, feature_list, att_perc = \
-            read_csv_dataset(os.path.join(CSV_FOLDER, dataset + "_train.csv"), label_name=LABEL_NAME, split=False)
+            read_csv_dataset(os.path.join(CSV_FOLDER, dataset + "_train.csv"), label_name=LABEL_NAME,
+                             split=False, shuffle=False)
         x_test, y_test, feature_list, att_perc = \
-            read_csv_dataset(os.path.join(CSV_FOLDER, dataset + "_test.csv"), label_name=LABEL_NAME, split=False)
+            read_csv_dataset(os.path.join(CSV_FOLDER, dataset + "_test.csv"), label_name=LABEL_NAME,
+                             split=False, shuffle=False)
+
+        for tr_c in x_train.columns:
+            if tr_c not in x_test.columns:
+                x_test[tr_c] = numpy.zeros(x_test.shape[0], dtype='int')
+
+        for te_c in x_test.columns:
+            if te_c not in x_train.columns:
+                x_test = x_test.drop(columns=[te_c])
 
         algs = []
         tr_preds = []
         te_preds = []
 
+        # Runs PDI Classifiers
+        for img_size in [40, 70]:
+            for strat in ['pca', 'tsne']:
+                clf = PDIClassifier(n_classes=len(numpy.unique(y_train)), img_size=img_size,
+                                    pdi_strategy=strat,
+                                    epochs=50, bsize=1024, val_split=0.3, verbose=0)
+                clf.fit(x_train, y_train)
+                algs.append(get_classifier_name(clf))
+                tr_preds.append(clf.predict_proba(x_train))
+                y_pred = clf.predict(x_test)
+                te_preds.append(clf.predict_proba(x_test))
+                print(get_clf_name(clf) + " MCC: " + str(sklearn.metrics.matthews_corrcoef(y_test, y_pred)))
+
+        # Runs PDITL Classifiers
+        for img_size in [40, 70]:
+            for strat in ['pca', 'tsne']:
+                clf = PDITLClassifier(n_classes=len(numpy.unique(y_train)), img_size=img_size,
+                                      pdi_strategy=strat,
+                                      epochs=50, bsize=1024, val_split=0.3, verbose=0)
+                clf.fit(x_train, y_train)
+                algs.append(get_classifier_name(clf))
+                tr_preds.append(clf.predict_proba(x_train))
+                y_pred = clf.predict(x_test)
+                te_preds.append(clf.predict_proba(x_test))
+                print(get_clf_name(clf) + " MCC: " + str(
+                    sklearn.metrics.matthews_corrcoef(y_test, y_pred)))
+
+
         # Runs Basic Classifiers
-        for clf in [GaussianNB(), LinearDiscriminantAnalysis(), DecisionTreeClassifier()]:
+        for clf in [KerasClassifier(n_features=x_train.shape[1], n_classes=len(numpy.unique(y_train))),
+                    GaussianNB(), LinearDiscriminantAnalysis(), DecisionTreeClassifier()]:
             clf.fit(x_train, y_train)
             algs.append(get_classifier_name(clf))
             tr_preds.append(clf.predict_proba(x_train))
             y_pred = clf.predict(x_test)
             te_preds.append(clf.predict_proba(x_test))
-            print(get_clf_name(clf) + " Accuracy: " + str(sklearn.metrics.balanced_accuracy_score(y_test, y_pred)))
+            print(get_clf_name(clf) + " MCC: " + str(sklearn.metrics.matthews_corrcoef(y_test, y_pred)))
 
         if not numpy.isnan(att_perc):
             cont = att_perc * 2 if att_perc * 2 < 0.5 else 0.5
@@ -148,32 +160,32 @@ if __name__ == '__main__':
                 tr_preds.append(clf.predict_proba(x_train))
                 y_pred = clf.predict(x_test)
                 te_preds.append(clf.predict_proba(x_test))
-                print(get_clf_name(clf) + " Accuracy: " + str(
-                    sklearn.metrics.accuracy_score(y_test, y_pred))
+                print(get_clf_name(clf) + " MCC: " + str(
+                    sklearn.metrics.matthews_corrcoef(y_test, y_pred))
                       + " Train time: " + str(current_ms() - start_time) + " ms")
 
         # Runs Tree-Based Classifiers
-        for clf in [XGB(), RandomForestClassifier()]:
-            start_time = current_ms()
-            clf.fit(x_train, y_train)
-            algs.append(get_classifier_name(clf))
-            tr_preds.append(clf.predict_proba(x_train))
-            y_pred = clf.predict(x_test)
-            te_preds.append(clf.predict_proba(x_test))
-            print(get_clf_name(clf) + " Accuracy: " + str(sklearn.metrics.accuracy_score(y_test, y_pred))
-                  + " Train time: " + str(current_ms() - start_time) + " ms")
+        # for clf in [XGB(), RandomForestClassifier()]:
+        #     start_time = current_ms()
+        #     clf.fit(x_train, y_train)
+        #     algs.append(get_classifier_name(clf))
+        #     tr_preds.append(clf.predict_proba(x_train))
+        #     y_pred = clf.predict(x_test)
+        #     te_preds.append(clf.predict_proba(x_test))
+        #     print(get_clf_name(clf) + " Accuracy: " + str(sklearn.metrics.accuracy_score(y_test, y_pred))
+        #           + " Train time: " + str(current_ms() - start_time) + " ms")
+        #
+        # # Runs DL Tabular Classifiers
+        # dl_clfs = []
+        # for clf in [FastAI(), TabNet(epochs=40, verbose=1, patience=2)]:
+        #     start_time = current_ms()
+        #     clf.fit(x_train, y_train)
+        #     algs.append(get_classifier_name(clf))
+        #     tr_preds.append(clf.predict_proba(x_train))
+        #     y_pred = clf.predict(x_test)
+        #     te_preds.append(clf.predict_proba(x_test))
+        #     print(get_clf_name(clf) + " Accuracy: " + str(sklearn.metrics.accuracy_score(y_test, y_pred))
+        #           + " Train time: " + str(current_ms() - start_time) + " ms")
 
-        # Runs DL Tabular Classifiers
-        dl_clfs = []
-        for clf in [FastAI(), TabNet(epochs=40, verbose=1, patience=2)]:
-            start_time = current_ms()
-            clf.fit(x_train, y_train)
-            algs.append(get_classifier_name(clf))
-            tr_preds.append(clf.predict_proba(x_train))
-            y_pred = clf.predict(x_test)
-            te_preds.append(clf.predict_proba(x_test))
-            print(get_clf_name(clf) + " Accuracy: " + str(sklearn.metrics.accuracy_score(y_test, y_pred))
-                  + " Train time: " + str(current_ms() - start_time) + " ms")
-
-        print_predictions(x_train, y_train, algs, tr_preds, os.path.join(OUTPUT_FOLDER, dataset), "train")
-        print_predictions(x_test, y_test, algs, te_preds, os.path.join(OUTPUT_FOLDER, dataset), "test")
+        print_predictions(x_train, y_train, algs, tr_preds, dataset, "train")
+        print_predictions(x_test, y_test, algs, te_preds, dataset, "test")
