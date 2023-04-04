@@ -60,13 +60,14 @@ class MEnsemble:
 
         adj_data = []
         max_bl_time = 0
+        start_time = current_ms()
         self.train_classes = len(numpy.unique(train_y))
         for clf in self.classifiers:
             clf_name = get_clf_name(clf)
-            start = current_ms()
+            start_bl = current_ms()
             if self.train_base:
                 clf.fit(train_x, train_y)
-                tr_time = current_ms() - start
+                tr_time = current_ms() - start_bl
                 if tr_time > max_bl_time:
                     max_bl_time = tr_time
                 if verbose:
@@ -75,6 +76,8 @@ class MEnsemble:
             clf_pred = clf.predict_proba(train_x)
             bl_names, bl_data = compute_baselearner_data(clf_name, clf_pred)
             adj_data.append(bl_data)
+
+        bl_time = current_ms() - start_time
 
         # Cleans up and unifies the dataset of predictions
         adj_data = numpy.column_stack(adj_data)
@@ -98,7 +101,7 @@ class MEnsemble:
             self.adj_data["train"]["x"] = copy.deepcopy(adj_data)
             self.adj_data["train"]["y"] = train_y
 
-        return max_bl_time
+        return max_bl_time, bl_time
 
     def predict(self, test_x):
         """
@@ -110,11 +113,16 @@ class MEnsemble:
         """
         adj_data = []
         clf_predictions = []
-
+        max_bl_time = 0
+        start_time = current_ms()
         for clf in self.classifiers:
             clf_name = get_clf_name(clf)
             try:
+                start = current_ms()
                 clf_pred = clf.predict_proba(test_x)
+                te_time = current_ms() - start
+                if te_time > max_bl_time:
+                    max_bl_time = te_time
             except:
                 print("Execution of learner " + clf_name + " failed")
                 clf_pred = numpy.full((test_x.shape[0], self.train_classes), 1.0/self.train_classes)
@@ -122,6 +130,7 @@ class MEnsemble:
             bl_names, bl_data = compute_baselearner_data(clf_name, clf_pred)
             adj_data.append(bl_data)
             clf_predictions.append(bl_data[:, 0])
+        bl_time = current_ms() - start_time
 
         # Cleans up and unifies the dataset of predictions
         adj_data = numpy.column_stack(adj_data)
@@ -139,7 +148,7 @@ class MEnsemble:
         if self.store_data:
             self.adj_data["test"]["x"] = copy.deepcopy(adj_data)
 
-        return self.binary_adjudicator.predict(adj_data), adj_data, clf_predictions
+        return self.binary_adjudicator.predict(adj_data), adj_data, clf_predictions, max_bl_time, bl_time
 
     def get_name(self):
         tag = ""
