@@ -70,7 +70,6 @@ class PDITLClassifier(PDIClassifier):
                 keras.metrics.AUC(name="auc")
             ]
         )
-        print(model.summary())
         self.model = model
 
     def classifier_name(self):
