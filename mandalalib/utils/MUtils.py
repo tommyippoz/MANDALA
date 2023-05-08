@@ -54,7 +54,8 @@ def read_csv_dataset(dataset_name, label_name="multilabel", limit=numpy.nan, spl
         return x_no_cat, y_enc, feature_list, numpy.NaN
 
 
-def read_csv_binary_dataset(dataset_name, label_name="multilabel", normal_tag="normal", limit=numpy.nan, split=True):
+def read_csv_binary_dataset(dataset_name, label_name="multilabel", normal_tag="normal",
+                            limit=numpy.nan, split=True, remove_constant=True):
     """
     Method to process an input dataset as CSV
     :param normal_tag: tag that identifies normal data
@@ -70,7 +71,8 @@ def read_csv_binary_dataset(dataset_name, label_name="multilabel", normal_tag="n
     df = df.sample(frac=1.0)
     df = df.fillna(0)
     df = df.replace('null', 0)
-    df = df[df.columns[df.nunique() > 1]]
+    if remove_constant:
+        df = df[df.columns[df.nunique() > 1]]
 
     # Testing Purposes
     if (numpy.isfinite(limit)) & (limit < len(df.index)):
