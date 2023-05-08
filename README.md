@@ -71,8 +71,9 @@ if __name__ == '__main__':
 
 ## Dependencies
 
-SPROUT needs the following libraries:
+MANDALA needs the following libraries:
 - <a href="https://numpy.org/">NumPy</a>
 - <a href="https://scipy.org/">SciPy</a>
 - <a href="https://pandas.pydata.org/">Pandas</a>
 - <a href="https://scikit-learn.org/stable/">SKLearn</a>
+- <a href="https://keras.io/about/">Keras</a>
