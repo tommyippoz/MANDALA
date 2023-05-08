@@ -15,7 +15,7 @@ class PDIClassifier(MANDALAClassifier):
     Wrapper for a keras sequential network
     """
 
-    def __init__(self, n_classes, img_size=70, pdi_strategy='tsne', epochs=50, bsize=1024, val_split=0.2, verbose=2):
+    def __init__(self, n_classes, img_size=70, pdi_strategy='tsne', epochs=50, bsize=1024, val_split=0.2, verbose=2, model=None):
         self.checkpoint_filepath = "./keras_tmp/checkpoint"
         self.img_t = None
         self.img_size = img_size
@@ -25,29 +25,30 @@ class PDIClassifier(MANDALAClassifier):
         self.verbose = verbose
         self.val_split = val_split
         self.norm_stats = {"train_avg": None, "train_std": None}
-        model = keras.Sequential(
-            [
-                keras.layers.Conv2D(filters=8, kernel_size=3, padding='same',
-                                    input_shape=(img_size, img_size, 3), activation='relu'),
-                keras.layers.BatchNormalization(),
-                keras.layers.MaxPooling2D(pool_size=2),
-                keras.layers.Flatten(),
-                keras.layers.Dropout(0.2),
-                keras.layers.Dense(img_size, activation='relu'),
-                keras.layers.Dropout(0.2),
-                keras.layers.Dense(int(img_size/2), activation='relu'),
-                keras.layers.Dropout(0.2),
-                keras.layers.Dense(int(img_size/4), activation='relu'),
-                keras.layers.Dropout(0.2),
-                keras.layers.Dense(n_classes, activation='softmax')
-            ]
-        )
-        model.compile(
-            optimizer='adam', loss="binary_crossentropy", metrics=[
-                keras.metrics.BinaryAccuracy(name="acc"),
-                keras.metrics.AUC(name="auc")
-            ]
-        )
+        if model is None:
+            model = keras.Sequential(
+                [
+                    keras.layers.Conv2D(filters=8, kernel_size=3, padding='same',
+                                        input_shape=(img_size, img_size, 3), activation='relu'),
+                    keras.layers.BatchNormalization(),
+                    keras.layers.MaxPooling2D(pool_size=2),
+                    keras.layers.Flatten(),
+                    keras.layers.Dropout(0.2),
+                    keras.layers.Dense(img_size, activation='relu'),
+                    keras.layers.Dropout(0.2),
+                    keras.layers.Dense(int(img_size/2), activation='relu'),
+                    keras.layers.Dropout(0.2),
+                    keras.layers.Dense(int(img_size/4), activation='relu'),
+                    keras.layers.Dropout(0.2),
+                    keras.layers.Dense(n_classes, activation='softmax')
+                ]
+            )
+            model.compile(
+                optimizer='adam', loss="binary_crossentropy", metrics=[
+                    keras.metrics.BinaryAccuracy(name="acc"),
+                    keras.metrics.AUC(name="auc")
+                ]
+            )
         MANDALAClassifier.__init__(self, model)
 
     def fit(self, x_train, y_train):
@@ -67,12 +68,22 @@ class PDIClassifier(MANDALAClassifier):
             mode='max',
             save_best_only=True)
 
+        es_callback = keras.callbacks.EarlyStopping(
+            monitor="val_acc",
+            min_delta=0,
+            patience=8,
+            verbose=0,
+            mode="auto",
+            baseline=None,
+            restore_best_weights=True,
+        )
+
         self.model.fit(x_t, train_targets_cat,
                        batch_size=self.bsize,
                        epochs=self.epochs,
                        verbose=self.verbose,
                        validation_split=self.val_split,
-                       callbacks=[model_checkpoint_callback])
+                       callbacks=[model_checkpoint_callback, es_callback])
         self.model.load_weights(self.checkpoint_filepath)
 
         self.feature_importances_ = self.compute_feature_importances()

@@ -29,7 +29,7 @@ from mandalalib.utils.MUtils import read_csv_dataset, read_csv_binary_dataset, g
 
 LABEL_NAME = 'label'
 CSV_FOLDER = "split_binary_datasets"
-OUTPUT_FOLDER = "./output/"
+OUTPUT_FOLDER = "./output_z/"
 
 DIVERSITY_METRICS = [QStatMetric(), SigmaMetric(), CoupleDisagreementMetric(), DisagreementMetric(),
                      SharedFaultMetric()]
@@ -111,6 +111,19 @@ if __name__ == '__main__':
         te_preds = []
 
         # Runs PDI Classifiers
+        # for img_size in [40, 70]:
+        #     for strat in ['pca', 'tsne']:
+        #         clf = PDIClassifier(n_classes=len(numpy.unique(y_train)), img_size=img_size,
+        #                             pdi_strategy=strat,
+        #                             epochs=50, bsize=1024, val_split=0.3, verbose=0)
+        #         clf.fit(x_train, y_train)
+        #         algs.append(get_classifier_name(clf))
+        #         tr_preds.append(clf.predict_proba(x_train))
+        #         y_pred = clf.predict(x_test)
+        #         te_preds.append(clf.predict_proba(x_test))
+        #         print(get_clf_name(clf) + " MCC: " + str(sklearn.metrics.matthews_corrcoef(y_test, y_pred)))
+
+        # Runs PDITL Classifiers
         for img_size in [40, 70]:
             for strat in ['pca', 'tsne']:
                 clf = PDIClassifier(n_classes=len(numpy.unique(y_train)), img_size=img_size,
@@ -123,46 +136,43 @@ if __name__ == '__main__':
                 te_preds.append(clf.predict_proba(x_test))
                 print(get_clf_name(clf) + " MCC: " + str(sklearn.metrics.matthews_corrcoef(y_test, y_pred)))
 
-        # Runs PDITL Classifiers
-        for img_size in [40, 70]:
-            for strat in ['pca', 'tsne']:
-                clf = PDITLClassifier(n_classes=len(numpy.unique(y_train)), img_size=img_size,
-                                      pdi_strategy=strat,
-                                      epochs=50, bsize=1024, val_split=0.3, verbose=0)
-                clf.fit(x_train, y_train)
-                algs.append(get_classifier_name(clf))
-                tr_preds.append(clf.predict_proba(x_train))
-                y_pred = clf.predict(x_test)
-                te_preds.append(clf.predict_proba(x_test))
-                print(get_clf_name(clf) + " MCC: " + str(
-                    sklearn.metrics.matthews_corrcoef(y_test, y_pred)))
-
+                for clf_set in ['default', 'simple', 'mini']:
+                    clf = PDITLClassifier(n_classes=len(numpy.unique(y_train)), img_size=img_size,
+                                          pdi_strategy=strat, clf_net=clf_set,
+                                          epochs=50, bsize=1024, val_split=0.3, verbose=0)
+                    clf.fit(x_train, y_train)
+                    algs.append(get_classifier_name(clf))
+                    tr_preds.append(clf.predict_proba(x_train))
+                    y_pred = clf.predict(x_test)
+                    te_preds.append(clf.predict_proba(x_test))
+                    print(get_clf_name(clf) + "[" + clf_set + "] MCC: " + str(
+                        sklearn.metrics.matthews_corrcoef(y_test, y_pred)))
 
         # Runs Basic Classifiers
-        for clf in [KerasClassifier(n_features=x_train.shape[1], n_classes=len(numpy.unique(y_train))),
-                    GaussianNB(), LinearDiscriminantAnalysis(), DecisionTreeClassifier()]:
-            clf.fit(x_train, y_train)
-            algs.append(get_classifier_name(clf))
-            tr_preds.append(clf.predict_proba(x_train))
-            y_pred = clf.predict(x_test)
-            te_preds.append(clf.predict_proba(x_test))
-            print(get_clf_name(clf) + " MCC: " + str(sklearn.metrics.matthews_corrcoef(y_test, y_pred)))
-
-        if not numpy.isnan(att_perc):
-            cont = att_perc * 2 if att_perc * 2 < 0.5 else 0.5
-            for clf in [UnsupervisedClassifier(COPOD(contamination=cont)),
-                        UnsupervisedClassifier(IForest(contamination=cont, max_features=0.8, max_samples=0.8)),
-                        UnsupervisedClassifier(HBOS(contamination=cont, n_bins=100)),
-                        UnsupervisedClassifier(CBLOF(contamination=cont, alpha=0.75, beta=3))]:
-                start_time = current_ms()
-                clf.fit(x_train)
-                algs.append(get_classifier_name(clf))
-                tr_preds.append(clf.predict_proba(x_train))
-                y_pred = clf.predict(x_test)
-                te_preds.append(clf.predict_proba(x_test))
-                print(get_clf_name(clf) + " MCC: " + str(
-                    sklearn.metrics.matthews_corrcoef(y_test, y_pred))
-                      + " Train time: " + str(current_ms() - start_time) + " ms")
+        # for clf in [KerasClassifier(n_features=x_train.shape[1], n_classes=len(numpy.unique(y_train))),
+        #             GaussianNB(), LinearDiscriminantAnalysis(), DecisionTreeClassifier()]:
+        #     clf.fit(x_train, y_train)
+        #     algs.append(get_classifier_name(clf))
+        #     tr_preds.append(clf.predict_proba(x_train))
+        #     y_pred = clf.predict(x_test)
+        #     te_preds.append(clf.predict_proba(x_test))
+        #     print(get_clf_name(clf) + " MCC: " + str(sklearn.metrics.matthews_corrcoef(y_test, y_pred)))
+        #
+        # if not numpy.isnan(att_perc):
+        #     cont = att_perc * 2 if att_perc * 2 < 0.5 else 0.5
+        #     for clf in [UnsupervisedClassifier(COPOD(contamination=cont)),
+        #                 UnsupervisedClassifier(IForest(contamination=cont, max_features=0.8, max_samples=0.8)),
+        #                 UnsupervisedClassifier(HBOS(contamination=cont, n_bins=100)),
+        #                 UnsupervisedClassifier(CBLOF(contamination=cont, alpha=0.75, beta=3))]:
+        #         start_time = current_ms()
+        #         clf.fit(x_train)
+        #         algs.append(get_classifier_name(clf))
+        #         tr_preds.append(clf.predict_proba(x_train))
+        #         y_pred = clf.predict(x_test)
+        #         te_preds.append(clf.predict_proba(x_test))
+        #         print(get_clf_name(clf) + " MCC: " + str(
+        #             sklearn.metrics.matthews_corrcoef(y_test, y_pred))
+        #               + " Train time: " + str(current_ms() - start_time) + " ms")
 
         # Runs Tree-Based Classifiers
         # for clf in [XGB(), RandomForestClassifier()]:

@@ -25,7 +25,7 @@ from mandalalib.classifiers.MANDALAClassifier import TabNet, FastAI, LogisticReg
 from mandalalib.utils.MUtils import read_csv_dataset, read_csv_binary_dataset, get_clf_name, current_ms, \
     get_classifier_name
 
-OUTPUT_FOLDER = "./output/aggregateselected"
+OUTPUT_FOLDER = "./output/aggregateselectedrecall"
 
 DIVERSITY_METRICS = [QStatMetric(), SigmaMetric(), CoupleDisagreementMetric(),
                      DisagreementMetric(relative=False),
@@ -88,6 +88,7 @@ if __name__ == '__main__':
             if base_metrics[dataset_name][clf_name]["acc"] < 0.5:
                 clfs[clf_name] = 1 - clfs[clf_name]
                 base_metrics[dataset_name][clf_name]["acc"] = sklearn.metrics.accuracy_score(clfs[clf_name], label)
+            base_metrics[dataset_name][clf_name]["rec"] = sklearn.metrics.recall_score(clfs[clf_name], label)
             base_metrics[dataset_name][clf_name]["mcc"] = sklearn.metrics.matthews_corrcoef(clfs[clf_name], label)
             print("MCC of %.3f for classifier %s" % (base_metrics[dataset_name][clf_name]["mcc"], clf_name))
 
@@ -118,6 +119,15 @@ if __name__ == '__main__':
                                columns=clf_names, index=[dataset_name])
         df = df.append(df1)
     df.to_csv(os.path.join(OUTPUT_FOLDER, "accuracies.csv"), index=True)
+
+    # Printing Recalls
+    df = pandas.DataFrame(columns=clf_names)
+    for dataset_name in base_metrics.keys():
+        df1 = pandas.DataFrame(
+            data=numpy.asarray([base_metrics[dataset_name][k]["rec"] for k in clf_names]).reshape(1, -1),
+            columns=clf_names, index=[dataset_name])
+        df = df.append(df1)
+    df.to_csv(os.path.join(OUTPUT_FOLDER, "recalls.csv"), index=True)
 
     # Printing MCCs
     df = pandas.DataFrame(columns=clf_names)

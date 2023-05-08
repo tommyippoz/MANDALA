@@ -43,10 +43,13 @@ class QStatMetric(EnsembleMetric):
         :return: a float value
         """
         n_clfs = clf_predictions.shape[1]
-        qd = QStatDiversity()
-        diversities = [qd.compute_diversity(clf_predictions[:, i], clf_predictions[:, j], test_y)
-                       for i in range(0, n_clfs-1) for j in range(i+1, n_clfs)]
-        return 2*sum(diversities)/(n_clfs*(n_clfs-1))
+        if n_clfs > 1:
+            qd = QStatDiversity()
+            diversities = [qd.compute_diversity(clf_predictions[:, i], clf_predictions[:, j], test_y)
+                           for i in range(0, n_clfs-1) for j in range(i+1, n_clfs)]
+            return 2*sum(diversities)/(n_clfs*(n_clfs-1))
+        else:
+            return 1
 
     def get_name(self):
         return 'QStat'
@@ -71,10 +74,13 @@ class SigmaMetric(EnsembleMetric):
         :return: a float value
         """
         n_clfs = clf_predictions.shape[1]
-        qd = SigmaDiversity()
-        diversities = [qd.compute_diversity(clf_predictions[:, i], clf_predictions[:, j], test_y)
-                       for i in range(0, n_clfs-1) for j in range(i+1, n_clfs)]
-        return 2*sum(diversities)/(n_clfs*(n_clfs-1))
+        if n_clfs > 1:
+            qd = SigmaDiversity()
+            diversities = [qd.compute_diversity(clf_predictions[:, i], clf_predictions[:, j], test_y)
+                           for i in range(0, n_clfs-1) for j in range(i+1, n_clfs)]
+            return 2*sum(diversities)/(n_clfs*(n_clfs-1))
+        else:
+            return 1
 
     def get_name(self):
         return 'Sigma'
