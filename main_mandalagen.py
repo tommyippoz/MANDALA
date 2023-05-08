@@ -1,18 +1,12 @@
 import copy
-import numpy
 import os
 
+import numpy
 import pandas
-from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
-from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier
-from sklearn.naive_bayes import GaussianNB
-from sklearn.tree import DecisionTreeClassifier
 
 from mandalalib.EnsembleMetric import QStatMetric, SigmaMetric, CoupleDisagreementMetric, DisagreementMetric, \
     SharedFaultMetric
-from mandalalib.MEnsemble import MEnsemble
-from mandalalib.classifiers.MANDALAClassifier import TabNet, FastAI, XGB
-
+from mandalalib.classifiers.MANDALAClassifier import XGB
 from mandalalib.utils.MUtils import read_csv_binary_dataset, current_ms, report, compute_feature_importances, \
     get_classifier_name
 

@@ -1,7 +1,7 @@
 import copy
-import numpy
 import os
 
+import numpy
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.tree import DecisionTreeClassifier

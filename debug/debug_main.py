@@ -21,7 +21,7 @@ from mandalalib.classifiers.MANDALAClassifier import TabNet, FastAI, LogisticReg
 from mandalalib.utils.MUtils import read_csv_dataset, read_csv_binary_dataset, get_clf_name, current_ms
 
 LABEL_NAME = 'multilabel'
-CSV_FILE = "datasets/AndMal_Shuffled.csv"
+CSV_FILE = "../datasets/AndMal_Shuffled.csv"
 CSV_FOLDER = "datasets"
 OUTPUT_FILE = "./output/bindatasets_V1.csv"
 
