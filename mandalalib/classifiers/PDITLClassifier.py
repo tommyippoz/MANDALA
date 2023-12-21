@@ -17,7 +17,7 @@ class PDITLClassifier(PDIClassifier):
         elif tl_tag == 'resnet':
             tl_model = ResNet50V2(include_top=False, weights='imagenet', input_shape=(img_size, img_size, 3))
         elif tl_tag == 'mnist':
-            tl_model = MobileNet(include_top=False, weights='mnist', input_shape=(img_size, img_size, 1))
+            tl_model = MobileNet(include_top=False, weights='imagenet', input_shape=(32, 32, 3))
         else:
             tl_model = MobileNet(include_top=False, weights='imagenet', input_shape=(img_size, img_size, 3))
         tl_model.trainable = True

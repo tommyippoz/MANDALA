@@ -48,7 +48,8 @@ def read_csv_dataset(dataset_name, label_name="multilabel", limit=numpy.nan, enc
     feature_list = x_no_cat.columns
 
     if split:
-        x_train, x_test, y_train, y_test = sklearn.model_selection.train_test_split(x_no_cat, y_enc, test_size=0.5, shuffle=True)
+        x_train, x_test, y_train, y_test = \
+            sklearn.model_selection.train_test_split(x_no_cat, y_enc, test_size=0.5, shuffle=shuffle)
         return x_train, x_test, y_train, y_test, feature_list
     else:
         return x_no_cat, y_enc, feature_list

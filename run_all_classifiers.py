@@ -24,12 +24,9 @@ from mandalalib.classifiers.PDITLClassifier import PDITLClassifier
 from mandalalib.utils.MUtils import read_csv_binary_dataset, get_clf_name, current_ms, read_csv_dataset
 
 LABEL_NAME = 'multilabel'
-CSV_FOLDER = "datasets_new/a"
+CSV_FOLDER = "datasets_new"
 OUTPUT_FILENAME = "single_multilabel_scores.csv"
 OUTPUT_FOLDER = './output'
-
-DIVERSITY_METRICS = [QStatMetric(), SigmaMetric(), CoupleDisagreementMetric(), DisagreementMetric(),
-                     SharedFaultMetric()]
 
 TAB_CLFS = [XGB(n_estimators=30),
             DecisionTreeClassifier(),
@@ -77,7 +74,7 @@ if __name__ == '__main__':
                                      pdi_strategy='pca', epochs=50, bsize=128, val_split=0.2, verbose=2),
                        PDIClassifier(n_classes=len(numpy.unique(y_train)), img_size=28,
                                      pdi_strategy='tsne', epochs=50, bsize=128, val_split=0.2, verbose=2),
-                       PDITLClassifier(n_classes=len(numpy.unique(y_train)), tl_tag='mobilenet', img_size=32,
+                       PDITLClassifier(n_classes=len(numpy.unique(y_train)), tl_tag='mobilenet', img_size=128,
                                        pdi_strategy='tsne', epochs=50, bsize=256, val_split=0.2, verbose=2),
                        PDITLClassifier(n_classes=len(numpy.unique(y_train)), tl_tag='mnist', img_size=28,
                                        pdi_strategy='tsne', epochs=50, bsize=256, val_split=0.2, verbose=2)
