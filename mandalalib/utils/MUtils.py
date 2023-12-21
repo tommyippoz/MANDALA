@@ -7,7 +7,7 @@ import sklearn
 from mandalalib.classifiers.MANDALAClassifier import MANDALAClassifier
 
 
-def read_csv_dataset(dataset_name, label_name="multilabel", limit=numpy.nan, split=True):
+def read_csv_dataset(dataset_name, label_name="multilabel", limit=numpy.nan, encode=True, split=True):
     """
     Method to process an input dataset as CSV
     :param normal_tag: tag that identifies normal data
@@ -29,12 +29,12 @@ def read_csv_dataset(dataset_name, label_name="multilabel", limit=numpy.nan, spl
     if (numpy.isfinite(limit)) & (limit < len(df.index)):
         df = df[0:limit]
 
-    if split:
+    if encode:
         encoding = pandas.factorize(df[label_name])
         y_enc = encoding[0]
         labels = encoding[1]
     else:
-        y_enc = df[label_name]
+        y_enc = df[label_name].to_numpy()
 
     # Basic Pre-Processing
     normal_frame = df.loc[df[label_name] == "normal"]
@@ -48,9 +48,9 @@ def read_csv_dataset(dataset_name, label_name="multilabel", limit=numpy.nan, spl
 
     if split:
         x_train, x_test, y_train, y_test = sklearn.model_selection.train_test_split(x_no_cat, y_enc, test_size=0.5, shuffle=True)
-        return x_train, x_test, y_train, y_test, feature_list, numpy.NaN
+        return x_train, x_test, y_train, y_test, feature_list
     else:
-        return x_no_cat, y_enc, feature_list, numpy.NaN
+        return x_no_cat, y_enc, feature_list
 
 
 def read_csv_binary_dataset(dataset_name, label_name="multilabel", normal_tag="normal", limit=numpy.nan, split=True):
@@ -179,11 +179,13 @@ def check_fitted(clf):
         return False
 
 
-def get_clf_name(clf):
-    if hasattr(clf, "classifier_name"):
-        return clf.classifier_name()
-    else:
-        return clf.__class__.__name__
+def get_clf_name(classifier):
+    clf_name = classifier.classifier_name() if hasattr(classifier,
+                                                       'classifier_name') else classifier.__class__.__name__
+    if clf_name == 'Pipeline':
+        keys = list(classifier.named_steps.keys())
+        clf_name = str(keys) if len(keys) != 2 else str(keys[1]).upper()
+    return clf_name
 
 
 def compute_feature_importances(clf):

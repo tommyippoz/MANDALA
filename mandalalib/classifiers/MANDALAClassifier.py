@@ -1,4 +1,9 @@
+import contextlib
 import copy
+import logging
+import os
+import sys
+import warnings
 
 import numpy
 import numpy as np
@@ -7,6 +12,10 @@ import pandas as pd
 import sklearn.metrics
 from autogluon.tabular import TabularPredictor
 from pytorch_tabnet.tab_model import TabNetClassifier
+from pytorch_tabular import TabularModel
+from pytorch_tabular.config import OptimizerConfig, TrainerConfig, DataConfig
+from pytorch_tabular.models import CategoryEmbeddingModelConfig, GatedAdditiveTreeEnsembleConfig, NodeConfig, \
+    TabNetModelConfig
 from sklearn.linear_model import LogisticRegression
 from sklearn.neighbors import KNeighborsClassifier
 from xgboost import XGBClassifier
@@ -155,14 +164,14 @@ class XGB(MANDALAClassifier):
     Wrapper for the XGBoost  algorithm from xgboost library
     """
 
-    def __init__(self, n_trees=None, metric=None):
+    def __init__(self, n_estimators=None, metric=None):
         self.metric = metric
-        if n_trees is None:
+        if n_estimators is None:
             MANDALAClassifier.__init__(self, XGBClassifier(use_label_encoder=False,
                                                            eval_metric=(
                                                                self.metric if self.metric is not None else "logloss")))
         else:
-            MANDALAClassifier.__init__(self, XGBClassifier(n_estimators=n_trees, use_label_encoder=False,
+            MANDALAClassifier.__init__(self, XGBClassifier(n_estimators=n_estimators, use_label_encoder=False,
                                                            eval_metric=(
                                                                self.metric if self.metric is not None else "logloss")))
 
@@ -339,4 +348,120 @@ class LogisticReg(MANDALAClassifier):
 
     def classifier_name(self):
         return "LogisticRegression"
+
+
+class PyTabularClassifier(MANDALAClassifier):
+    """
+        Wrapper for classifiers taken from Gluon library
+        clf_name options are
+        ‘GBM’ (LightGBM)
+        ‘CAT’ (CatBoost)
+        ‘XGB’ (XGBoost)
+        ‘RF’ (random forest)
+        ‘XT’ (extremely randomized trees)
+        ‘KNN’ (k-nearest neighbors)
+        ‘LR’ (linear regression)
+        ‘NN’ (neural network with MXNet backend)
+        ‘FASTAI’ (neural network with FastAI backend)
+        """
+
+    def __init__(self, label_name, clf_name, features, verbose=0):
+        MANDALAClassifier.__init__(self, self.build_classifier(label_name, clf_name, features))
+        self.label_name = label_name
+        self.clf_name = clf_name
+        self.feature_names = features
+        self.feature_importance = []
+
+    def build_classifier(self, label_name, clf_name, features):
+        data_config = DataConfig(
+            target=[label_name],
+            # target should always be a list. Multi-targets are only supported for regression. Multi-Task Classification is not implemented
+            continuous_cols=list(features),
+            categorical_cols=[],
+            # num_workers=8
+        )
+        trainer_config = TrainerConfig(
+            auto_lr_find=True,  # Runs the LRFinder to automatically derive a learning rate
+            batch_size=1024,
+            max_epochs=100,
+        )
+        optimizer_config = OptimizerConfig()
+
+        if clf_name == 'NODE':
+            model_config = NodeConfig(
+                task="classification",
+                depth=4,
+                choice_function="entmax15",  # Number of nodes in each layer
+                bin_function="entmoid15",  # Activation between each layers
+                additional_tree_output_dim=3,
+                input_dropout=0.0
+            )
+        elif clf_name == 'GATE':
+            model_config = GatedAdditiveTreeEnsembleConfig(
+                task="classification",
+                num_trees=20,  # Number of nodes in each layer
+                tree_depth=5,  # Activation between each layers
+                chain_trees=False,
+                share_head_weights=True,
+            )
+        elif clf_name == 'TabNet':
+            model_config = TabNetModelConfig(
+                task="classification",
+                n_d=8,
+                n_a=8,  # Number of nodes in each layer
+                n_steps=3,  # Activation between each layers
+                virtual_batch_size=128,
+            )
+        else:
+            model_config = CategoryEmbeddingModelConfig(
+                task="classification",
+                layers="1024-512-512",  # Number of nodes in each layer
+                activation="LeakyReLU",  # Activation between each layers
+                learning_rate=1e-3,
+            )
+
+        tabular_model = TabularModel(
+            data_config=data_config,
+            model_config=model_config,
+            optimizer_config=optimizer_config,
+            trainer_config=trainer_config,
+        )
+
+        return tabular_model
+
+    def fit(self, x_train, y_train):
+        if isinstance(x_train, pd.DataFrame):
+            df = pd.DataFrame(data=x_train.to_numpy(), columns=self.feature_names)
+        else:
+            df = pd.DataFrame(data=x_train, columns=self.feature_names)
+        df[self.label_name] = y_train
+        self.model.fit(train=df)
+        self.feature_importances_ = self.compute_feature_importances()
+        self.classes_ = numpy.unique(y_train)
+        self.trained = True
+
+    def compute_feature_importances(self):
+        importances = []
+
+        return np.asarray(importances)
+
+    def predict(self, x_test):
+        if isinstance(x_test, pd.DataFrame):
+            df = pd.DataFrame(data=x_test.to_numpy(), columns=self.feature_names)
+        else:
+            df = pd.DataFrame(data=x_test, columns=self.feature_names)
+        pred_df = self.model.predict(df)
+        return numpy.asarray(pred_df['prediction'])
+
+    def predict_proba(self, x_test):
+        if isinstance(x_test, pd.DataFrame):
+            df = pd.DataFrame(data=x_test.to_numpy(), columns=self.feature_names)
+        else:
+            df = pd.DataFrame(data=x_test, columns=self.feature_names)
+        pred_df = self.model.predict(df)
+        df2 = pred_df.filter(regex='_probability')
+        return df2.to_numpy()
+
+    def classifier_name(self):
+        return "PyTorch-Tabular(" + str(self.clf_name) + ")"
 

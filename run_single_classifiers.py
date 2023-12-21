@@ -3,16 +3,21 @@ import sklearn.metrics
 
 import os
 
-from pyod.models.cblof import CBLOF
-from pyod.models.copod import COPOD
-from pyod.models.hbos import HBOS
-from pyod.models.iforest import IForest
-from sklearn.ensemble import RandomForestClassifier
+import torch
+from joblib import dump
+from logitboost import LogitBoost
+from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
+from sklearn.ensemble import RandomForestClassifier, ExtraTreesClassifier
+from sklearn.linear_model import LogisticRegression
+from sklearn.naive_bayes import GaussianNB
+from sklearn.pipeline import Pipeline
+from sklearn.preprocessing import MinMaxScaler
 from sklearn.tree import DecisionTreeClassifier
 
 from mandalalib.EnsembleMetric import QStatMetric, SigmaMetric, CoupleDisagreementMetric, DisagreementMetric, \
     SharedFaultMetric
-from mandalalib.classifiers.MANDALAClassifier import TabNet, FastAI, UnsupervisedClassifier, XGB
+from mandalalib.classifiers.MANDALAClassifier import FastAI, XGB, PyTabularClassifier, \
+    LogisticReg
 from mandalalib.utils.MUtils import read_csv_binary_dataset, get_clf_name, current_ms, read_csv_dataset
 
 LABEL_NAME = 'multilabel'
@@ -22,77 +27,61 @@ OUTPUT_FILE = "./output/single_multilabel_scores.csv"
 DIVERSITY_METRICS = [QStatMetric(), SigmaMetric(), CoupleDisagreementMetric(), DisagreementMetric(),
                      SharedFaultMetric()]
 
+TAB_CLFS = [XGB(n_estimators=30),
+            DecisionTreeClassifier(),
+            Pipeline([("norm", MinMaxScaler()), ("gnb", GaussianNB())]),
+            RandomForestClassifier(n_estimators=30),
+            LinearDiscriminantAnalysis(),
+            LogisticRegression(max_iter=10000),
+            ExtraTreesClassifier(n_estimators=30),
+            LogitBoost(n_estimators=30)]
+
 if __name__ == '__main__':
 
     with open(OUTPUT_FILE, 'w') as f:
-        f.write('dataset,clf,time,matrix,acc,b_acc,mcc,logloss\n')
+        f.write('dataset,clf,train_time,test_time,model_size,train_size,test_size,n_feat,acc,b_acc,mcc\n')
 
     for file in os.listdir(CSV_FOLDER):
         if file.endswith(".csv"):
 
             # Reads CSV Dataset
-            x_train, x_test, y_train, y_test, feature_list, att_perc = \
-                read_csv_dataset(os.path.join(CSV_FOLDER, file))
+            x_train, x_test, y_train, y_test, feature_list = \
+                read_csv_dataset(os.path.join(CSV_FOLDER, file), limit=50000, encode=True)
 
-            # u_clfs = []
-            # cont = att_perc*2 if att_perc*2 < 0.5 else 0.5
-            # for clf in [UnsupervisedClassifier(COPOD(contamination=cont)),
-            #             UnsupervisedClassifier(IForest(contamination=cont, max_features=0.8, max_samples=0.8)),
-            #             UnsupervisedClassifier(HBOS(contamination=cont, n_bins=100)),
-            #             UnsupervisedClassifier(CBLOF(contamination=cont, alpha=0.75, beta=3))]:
-            #     start_time = current_ms()
-            #     clf.fit(x_train, y_train)
-            #     u_clfs.append(clf)
-            #     y_pred = clf.predict(x_test)
-            #     print(get_clf_name(clf) + " Accuracy: " + str(
-            #         sklearn.metrics.accuracy_score(y_test, y_pred))
-            #           + " Train time: " + str(current_ms() - start_time) + " ms")
-            #
-            #     # Logging to file
-            #     with open(OUTPUT_FILE, 'a') as f:
-            #         f.write(file + "," + get_clf_name(clf) + "," + str(current_ms() - start_time) + ","
-            #                 + str(sklearn.metrics.confusion_matrix(y_test, y_pred).flatten()) + ","
-            #                 + str(sklearn.metrics.accuracy_score(y_test, y_pred)) + ","
-            #                 + str(sklearn.metrics.balanced_accuracy_score(y_test, y_pred)) + ","
-            #                 + str(sklearn.metrics.matthews_corrcoef(y_test, y_pred)) + ","
-            #                 + str(sklearn.metrics.log_loss(y_test, y_pred)) + "\n")
+            print('--------------------------------------'
+                  '\n-------- DATASET ' + str(file) + ' ---------\n')
 
-            # Runs Tree-Based Classifiers
-            tb_clfs = []
-            for clf in [XGB(), RandomForestClassifier(), DecisionTreeClassifier()]:
+            NN_CLFS = [PyTabularClassifier(label_name=LABEL_NAME, clf_name='NODE', features=feature_list),
+                       PyTabularClassifier(label_name=LABEL_NAME, clf_name='TabNet', features=feature_list),
+                       PyTabularClassifier(label_name=LABEL_NAME, clf_name='GATE', features=feature_list),
+                       PyTabularClassifier(label_name=LABEL_NAME, clf_name='', features=feature_list)]
+
+            all_clfs = TAB_CLFS + NN_CLFS
+            for clf in [FastAI(label_name=LABEL_NAME, metric='accuracy')]:
+                # Train
                 start_time = current_ms()
-                clf.fit(x_train, y_train)
-                tb_clfs.append(clf)
-                y_proba = clf.predict_proba(x_test)
-                y_pred = clf.predict(x_test)
+                clf.fit(x_train.to_numpy(), y_train)
+                train_time = current_ms()
+
+                # Test
+                y_proba = clf.predict_proba(x_test.to_numpy())
+                test_time = current_ms()
+                y_pred = clf.predict(x_test.to_numpy())
+
+                # Quantifying size of the model
+                dump(clf, "clf_dump.bin", compress=9)
+                size = os.stat("clf_dump.bin").st_size
+                os.remove("clf_dump.bin")
+
+                # Console
                 print(get_clf_name(clf) + " Accuracy: " + str(sklearn.metrics.accuracy_score(y_test, y_pred))
                       + " Train time: " + str(current_ms() - start_time) + " ms")
 
                 # Logging to file
                 with open(OUTPUT_FILE, 'a') as f:
-                    f.write(file + "," + get_clf_name(clf) + "," + str(current_ms() - start_time) + ","
-                            + str(sklearn.metrics.confusion_matrix(y_test, y_pred).flatten()) + ","
+                    f.write(file + "," + get_clf_name(clf) + "," + str(train_time - start_time) + ","
+                            + str(test_time - train_time) + "," + str(size) + ","
+                            + str(len(y_train)) + "," + str(len(y_test)) + "," + str(len(feature_list)) + ","
                             + str(sklearn.metrics.accuracy_score(y_test, y_pred)) + ","
                             + str(sklearn.metrics.balanced_accuracy_score(y_test, y_pred)) + ","
-                            + str(sklearn.metrics.matthews_corrcoef(y_test, y_pred)) + ","
-                            + str(sklearn.metrics.log_loss(y_test, y_proba)) + "\n")
-
-            # Runs DL Tabular Classifiers
-            dl_clfs = []
-            for clf in [FastAI(feature_names=feature_list), TabNet(epochs=40, verbose=1, patience=2), TabNet(epochs=100, verbose=1, patience=2)]:
-                start_time = current_ms()
-                clf.fit(x_train, y_train)
-                dl_clfs.append(clf)
-                y_proba = clf.predict_proba(x_test)
-                y_pred = clf.predict(x_test)
-                print(get_clf_name(clf) + " Accuracy: " + str(sklearn.metrics.accuracy_score(y_test, y_pred))
-                      + " Train time: " + str(current_ms() - start_time) + " ms")
-
-                # Logging to file
-                with open(OUTPUT_FILE, 'a') as f:
-                    f.write(file + "," + get_clf_name(clf) + "," + str(current_ms() - start_time) + ","
-                            + str(sklearn.metrics.confusion_matrix(y_test, y_pred).flatten()) + ","
-                            + str(sklearn.metrics.accuracy_score(y_test, y_pred)) + ","
-                            + str(sklearn.metrics.balanced_accuracy_score(y_test, y_pred)) + ","
-                            + str(sklearn.metrics.matthews_corrcoef(y_test, y_pred)) + ","
-                            + str(sklearn.metrics.log_loss(y_test, y_proba)) + "\n")
+                            + str(sklearn.metrics.matthews_corrcoef(y_test, y_pred)) + "\n")

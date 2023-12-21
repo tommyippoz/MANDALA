@@ -21,63 +21,17 @@ from mandalalib.EnsembleMetric import QStatMetric, SigmaMetric, CoupleDisagreeme
     SharedFaultMetric
 from mandalalib.MEnsemble import MEnsemble
 from mandalalib.classifiers.MANDALAClassifier import TabNet, FastAI, LogisticReg, UnsupervisedClassifier, XGB
+from mandalalib.classifiers.PDIClassifier import PDIClassifier
+from mandalalib.classifiers.PDITLClassifier import PDITLClassifier
 from mandalalib.utils.MUtils import read_csv_dataset, read_csv_binary_dataset, get_clf_name, current_ms, \
     get_classifier_name
 
 LABEL_NAME = 'label'
-CSV_FOLDER = "split_binary_datasets_other"
+CSV_FOLDER = "datasets"
 OUTPUT_FOLDER = "./output/aaa"
 
 DIVERSITY_METRICS = [QStatMetric(), SigmaMetric(), CoupleDisagreementMetric(), DisagreementMetric(),
                      SharedFaultMetric()]
-
-
-def get_ensembles(set1, set2, set3, cont):
-    e_list = []
-    stackers = [DecisionTreeClassifier(), LinearDiscriminantAnalysis(),
-                RandomForestClassifier(n_estimators=10), XGB(n_trees=10)]
-    for ut in [False, True]:
-        for adj in stackers:
-            e_list.append(MEnsemble(models_folder="",
-                                    classifiers=set1,
-                                    diversity_metrics=DIVERSITY_METRICS,
-                                    bin_adj=adj,
-                                    use_training=ut))
-    for ut in [False, True]:
-        for adj in stackers:
-            e_list.append(MEnsemble(models_folder="",
-                                    classifiers=set2,
-                                    diversity_metrics=DIVERSITY_METRICS,
-                                    bin_adj=adj,
-                                    use_training=ut))
-    for ut in [False, True]:
-        for adj in stackers:
-            e_list.append(MEnsemble(models_folder="",
-                                    classifiers=set3,
-                                    diversity_metrics=DIVERSITY_METRICS,
-                                    bin_adj=adj,
-                                    use_training=ut))
-    for c2 in set2:
-        for c3 in set3:
-            for ut in [False, True]:
-                for adj in stackers:
-                    e_list.append(MEnsemble(models_folder="",
-                                            classifiers=[c2, c3],
-                                            diversity_metrics=DIVERSITY_METRICS,
-                                            bin_adj=adj,
-                                            use_training=ut))
-    for c1 in set1:
-        for c2 in set2:
-            for c3 in set3:
-                for ut in [False, True]:
-                    for adj in stackers:
-                        e_list.append(MEnsemble(models_folder="",
-                                                classifiers=[c1, c2, c3],
-                                                diversity_metrics=DIVERSITY_METRICS,
-                                                bin_adj=adj,
-                                                use_training=ut))
-
-    return e_list
 
 
 def entropy(probs):
@@ -128,7 +82,7 @@ if __name__ == '__main__':
         te_preds = []
 
         # Runs Basic Classifiers
-        for clf in [GaussianNB(), LinearDiscriminantAnalysis(), DecisionTreeClassifier()]:
+        for clf in [PDIClassifier(), PDITLClassifier(n_classes=len()), DecisionTreeClassifier()]:
             clf.fit(x_train, y_train)
             algs.append(get_classifier_name(clf))
             tr_preds.append(clf.predict_proba(x_train))
