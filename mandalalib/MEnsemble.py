@@ -5,13 +5,19 @@ import numpy
 import pandas
 import sklearn
 
-from mandalalib.utils.MUtils import check_fitted, get_clf_name, compute_feature_importances
+from mandalalib.utils.MUtils import check_fitted, get_clf_name, compute_feature_importances, current_ms, entropy
+
+
+def compute_baselearner_data(clf_name, preds):
+    full_predictions = [numpy.argmax(preds, axis=1), numpy.max(preds, axis=1), entropy(preds)]
+    features = [clf_name + "_pred", clf_name + "_maxprob", clf_name + "_entropy"]
+    return features, numpy.asarray(full_predictions).T
 
 
 class MEnsemble:
 
     def __init__(self, models_folder, classifiers=[], diversity_metrics=[], bin_adj=[],
-                 use_training=True, store_data=True):
+                 use_training=True, store_data=False, train_base=True):
         """
         Constructor for the MEnsemble object
         """
@@ -23,6 +29,7 @@ class MEnsemble:
         self.adj_data = {"train": {}, "test": {}}
         self.binary_adjudicator = bin_adj
         self.train_classes = 0
+        self.train_base = train_base
 
     def add_classifier(self, clf):
         """
@@ -52,28 +59,25 @@ class MEnsemble:
             print("Classifiers will be trained using %d train data points" % (len(train_y)))
 
         adj_data = []
-        adj_features = []
+        max_bl_time = 0
+        start_time = current_ms()
         self.train_classes = len(numpy.unique(train_y))
         for clf in self.classifiers:
             clf_name = get_clf_name(clf)
-            #try:
-            start = time.time()
-            if not check_fitted(clf):
+            start_bl = current_ms()
+            if self.train_base:
                 clf.fit(train_x, train_y)
+                tr_time = current_ms() - start_bl
+                if tr_time > max_bl_time:
+                    max_bl_time = tr_time
                 if verbose:
                     print("Training of classifier '" + clf_name + "' completed in " +
-                          str(time.time() - start) + " seconds")
+                          str(tr_time) + " ms")
             clf_pred = clf.predict_proba(train_x)
-            #except:
-            #    print("Execution of learner " + clf_name + " failed")
-            #    clf_pred = numpy.full((len(train_y), self.train_classes), 1.0/self.train_classes)
+            bl_names, bl_data = compute_baselearner_data(clf_name, clf_pred)
+            adj_data.append(bl_data)
 
-            adj_data.append(clf_pred)
-            class_pred = numpy.argmax(clf_pred, axis=1)
-            adj_data.append(class_pred)
-            adj_features.extend([clf_name + "_p_c" + str(i) for i in range(0, self.train_classes)])
-            adj_features.extend([clf_name + "_label"])
-
+        bl_time = current_ms() - start_time
 
         # Cleans up and unifies the dataset of predictions
         adj_data = numpy.column_stack(adj_data)
@@ -84,18 +88,20 @@ class MEnsemble:
 
         # Trains meta-level learner
         if self.binary_adjudicator is not None:
-            start = time.time()
+            start = current_ms()
             self.binary_adjudicator.fit(adj_data, train_y)
             adj_pred = self.binary_adjudicator.predict(adj_data)
             if verbose:
                 print("Training of adjudicator '" + get_clf_name(self.binary_adjudicator) +
-                      "' completed in " + str(time.time() - start) + " seconds, train accuracy " +
+                      "' completed in " + str(current_ms() - start) + " ms, train accuracy " +
                       str(sklearn.metrics.accuracy_score(train_y, adj_pred)))
 
         # Stores pandas DF if needed
         if self.store_data:
             self.adj_data["train"]["x"] = copy.deepcopy(adj_data)
             self.adj_data["train"]["y"] = train_y
+
+        return max_bl_time, bl_time
 
     def predict(self, test_x):
         """
@@ -107,24 +113,31 @@ class MEnsemble:
         """
         adj_data = []
         clf_predictions = []
-
+        max_bl_time = 0
+        start_time = current_ms()
         for clf in self.classifiers:
             clf_name = get_clf_name(clf)
             try:
-                start = time.time()
+                start = current_ms()
                 clf_pred = clf.predict_proba(test_x)
+                te_time = current_ms() - start
+                if te_time > max_bl_time:
+                    max_bl_time = te_time
             except:
                 print("Execution of learner " + clf_name + " failed")
                 clf_pred = numpy.full((test_x.shape[0], self.train_classes), 1.0/self.train_classes)
 
-            adj_data.append(clf_pred)
-            class_pred = numpy.argmax(clf_pred, axis=1)
-            adj_data.append(class_pred)
-            clf_predictions.append(class_pred)
+            bl_names, bl_data = compute_baselearner_data(clf_name, clf_pred)
+            adj_data.append(bl_data)
+            clf_predictions.append(bl_data[:, 0])
+        bl_time = current_ms() - start_time
 
         # Cleans up and unifies the dataset of predictions
         adj_data = numpy.column_stack(adj_data)
-        adj_data = numpy.nan_to_num(adj_data, nan=-1.0/self.train_classes, posinf=1.0/self.train_classes, neginf=1.0/self.train_classes)
+        adj_data = numpy.nan_to_num(adj_data, nan=-1.0 / self.train_classes, posinf=1.0 / self.train_classes,
+                                    neginf=1.0 / self.train_classes)
+
+        # Cleans up and unifies the dataset of predictions
         clf_predictions = numpy.column_stack(clf_predictions)
         clf_predictions = numpy.nan_to_num(clf_predictions, nan=-0, posinf=0, neginf=0)
 
@@ -135,44 +148,7 @@ class MEnsemble:
         if self.store_data:
             self.adj_data["test"]["x"] = copy.deepcopy(adj_data)
 
-        return self.binary_adjudicator.predict(adj_data), adj_data, clf_predictions
-
-
-    def report(self, adj_scores, clf_predictions, test_y, verbose=True):
-        """
-
-        :param adj_scores: scores of the clfs in the ensemble
-        :param clf_predictions: predictions of the clfs in the ensemble
-        :param test_y: labels of the test set
-        :param verbose: True if debug information need to be shown
-        :return:
-        """
-        metric_scores = {}
-        for metric in self.diversity_metrics:
-            metric_scores[metric.get_name()] = metric.compute_diversity(clf_predictions, test_y)
-            if verbose:
-                print("Diversity using metric " + metric.get_name() + ": " + str(metric_scores[metric.get_name()]))
-
-        clf_metrics = {}
-        for i in range(0, clf_predictions.shape[1]):
-            clf_metrics["clf_" + str(i)] = {}
-            clf_metrics["clf_" + str(i)]["matrix"] = sklearn.metrics.confusion_matrix(test_y, clf_predictions[:, i])
-            clf_metrics["clf_" + str(i)]["acc"] = sklearn.metrics.accuracy_score(test_y, clf_predictions[:, i])
-            clf_metrics["clf_" + str(i)]["b_acc"] = sklearn.metrics.balanced_accuracy_score(test_y, clf_predictions[:, i])
-            clf_metrics["clf_" + str(i)]["mcc"] = sklearn.metrics.matthews_corrcoef(test_y, clf_predictions[:, i])
-            clf_metrics["clf_" + str(i)]["logloss"] = sklearn.metrics.log_loss(test_y, clf_predictions[:, i])
-        clf_metrics["adj"] = {}
-        clf_metrics["adj"]["matrix"] = numpy.asarray(sklearn.metrics.confusion_matrix(test_y, adj_scores)).flatten()
-        clf_metrics["adj"]["acc"] = sklearn.metrics.accuracy_score(test_y, adj_scores)
-        clf_metrics["adj"]["b_acc"] = sklearn.metrics.balanced_accuracy_score(test_y, adj_scores)
-        clf_metrics["adj"]["mcc"] = sklearn.metrics.matthews_corrcoef(test_y, adj_scores)
-        clf_metrics["adj"]["logloss"] = sklearn.metrics.log_loss(test_y, adj_scores)
-        clf_metrics["adj"]["best_base_acc"] = max([clf_metrics[k]["acc"] for k in clf_metrics.keys() if k not in ["adj"]])
-        clf_metrics["adj"]["best_base_mcc"] = max([abs(clf_metrics[k]["mcc"]) for k in clf_metrics.keys() if k not in ["adj"]])
-        clf_metrics["adj"]["acc_gain"] = clf_metrics["adj"]["acc"] - clf_metrics["adj"]["best_base_acc"]
-        clf_metrics["adj"]["mcc_gain"] = abs(clf_metrics["adj"]["mcc"]) - clf_metrics["adj"]["best_base_mcc"]
-
-        return metric_scores, clf_metrics
+        return self.binary_adjudicator.predict(adj_data), adj_data, clf_predictions, max_bl_time, bl_time
 
     def get_name(self):
         tag = ""

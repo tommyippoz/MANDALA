@@ -1,17 +1,3 @@
-# MANDALA
-
-Python Library for building enseMbles for ANomaly Detection in tAbuLar dAta
-
-Repository containing code supprting the submission "Tree-Based and Deep Learning Algorithms: Teaming up for Detecting Errors and Intrusions"
-
-Code for running experiments used in the paper is in the main folder of the repository. However, datasets are not ours so we cannot directly share them in the reporitory. Please refer to the references in the paper to obtain them.
-
-## Usage
-
-Library implementing a MANDALA classifier is in the 'mandalalib' folder.
-A simple example of how to apply MANDALA classifiers to a sample dataset can be found in this [py file](example_mandalaspec.py) file
-
-```python
 import numpy
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
 from sklearn.ensemble import RandomForestClassifier
@@ -67,13 +53,3 @@ if __name__ == '__main__':
                                         diversity_metrics=DIVERSITY_METRICS, verbose=False)
     print(m_ens.get_name() + " MCC: " + str(clf_metrics["adj"]["mcc"])
           + " Train Time: " + str(elapsed_tr) + " ms")
-```
-
-## Dependencies
-
-MANDALA needs the following libraries:
-- <a href="https://numpy.org/">NumPy</a>
-- <a href="https://scipy.org/">SciPy</a>
-- <a href="https://pandas.pydata.org/">Pandas</a>
-- <a href="https://scikit-learn.org/stable/">SKLearn</a>
-- <a href="https://keras.io/about/">Keras</a>
