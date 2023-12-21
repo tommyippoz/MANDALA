@@ -1,31 +1,18 @@
-from math import log, e
-
-import numpy
-import pandas
-import sklearn.metrics
-
 import os
 
-from pyod.models.cblof import CBLOF
-from pyod.models.copod import COPOD
-from pyod.models.ecod import ECOD
-from pyod.models.hbos import HBOS
-from pyod.models.iforest import IForest
+import numpy
+import sklearn.metrics
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
-from sklearn.ensemble import AdaBoostClassifier, RandomForestClassifier
-from sklearn.naive_bayes import GaussianNB
+from sklearn.ensemble import RandomForestClassifier
 from sklearn.tree import DecisionTreeClassifier
-from xgboost import XGBClassifier, XGBRFClassifier
 
 from mandalalib.EnsembleMetric import QStatMetric, SigmaMetric, CoupleDisagreementMetric, DisagreementMetric, \
     SharedFaultMetric
 from mandalalib.MEnsemble import MEnsemble
-from mandalalib.classifiers.KerasClassifier import KerasClassifier
-from mandalalib.classifiers.MANDALAClassifier import TabNet, FastAI, LogisticReg, UnsupervisedClassifier, XGB
+from mandalalib.classifiers.MANDALAClassifier import XGB
 from mandalalib.classifiers.PDIClassifier import PDIClassifier
 from mandalalib.classifiers.PDITLClassifier import PDITLClassifier
-from mandalalib.utils.MUtils import read_csv_dataset, read_csv_binary_dataset, get_clf_name, current_ms, \
-    get_classifier_name
+from mandalalib.utils.MUtils import read_csv_dataset, get_clf_name, get_classifier_name
 
 LABEL_NAME = 'label'
 CSV_FOLDER = "split_binary_datasets"

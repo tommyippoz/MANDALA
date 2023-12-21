@@ -1,5 +1,4 @@
 import keras
-
 from keras.applications import VGG16, ResNet50V2, MobileNet
 
 from mandalalib.classifiers.PDIClassifier import PDIClassifier

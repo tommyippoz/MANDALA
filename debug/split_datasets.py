@@ -1,6 +1,6 @@
 import os
 
-from mandalalib.utils.MUtils import read_csv_dataset, read_csv_binary_dataset
+from mandalalib.utils.MUtils import read_csv_dataset
 
 LABEL_NAME = 'multilabel'
 CSV_FOLDER = "datasets"

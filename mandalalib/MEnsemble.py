@@ -1,11 +1,9 @@
 import copy
-import time
 
 import numpy
-import pandas
 import sklearn
 
-from mandalalib.utils.MUtils import check_fitted, get_clf_name, compute_feature_importances, current_ms, entropy
+from mandalalib.utils.MUtils import get_clf_name, compute_feature_importances, current_ms, entropy
 
 
 def compute_baselearner_data(clf_name, preds):

@@ -46,7 +46,7 @@ if __name__ == '__main__':
     start_time = current_ms()
     m_ens.fit(x_train, y_train, verbose=True)
     elapsed_tr = current_ms() - start_time
-    ens_predictions, adj_data, clf_predictions = m_ens.predict(x_test)
+    ens_predictions, adj_data, clf_predictions, a, b = m_ens.predict(x_test)
 
     # Reports MEnsemble Stats
     metric_scores, clf_metrics = report(ens_predictions, clf_predictions, y_test,
