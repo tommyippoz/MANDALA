@@ -7,7 +7,7 @@ import sklearn
 from mandalalib.classifiers.MANDALAClassifier import MANDALAClassifier
 
 
-def read_csv_dataset(dataset_name, label_name="multilabel", limit=numpy.nan, encode=True, split=True):
+def read_csv_dataset(dataset_name, label_name="multilabel", limit=numpy.nan, encode=True, split=True, shuffle=True):
     """
     Method to process an input dataset as CSV
     :param normal_tag: tag that identifies normal data
@@ -20,7 +20,8 @@ def read_csv_dataset(dataset_name, label_name="multilabel", limit=numpy.nan, enc
     df = pandas.read_csv(dataset_name, sep=",")
 
     # Shuffle
-    df = df.sample(frac=1.0)
+    if shuffle:
+        df = df.sample(frac=1.0)
     df = df.fillna(0)
     df = df.replace('null', 0)
     df = df[df.columns[df.nunique() > 1]]
@@ -200,3 +201,41 @@ def compute_feature_importances(clf):
     elif isinstance(clf, MANDALAClassifier):
         return clf.compute_feature_importances()
     return []
+
+
+def report(adj_scores, clf_predictions, test_y, diversity_metrics, verbose=True):
+    """
+
+    :param adj_scores: scores of the clfs in the ensemble
+    :param clf_predictions: predictions of the clfs in the ensemble
+    :param test_y: labels of the test set
+    :param verbose: True if debug information need to be shown
+    :return:
+    """
+    metric_scores = {}
+    for metric in diversity_metrics:
+        metric_scores[metric.get_name()] = metric.compute_diversity(clf_predictions, test_y)
+        if verbose:
+            print("Diversity using metric " + metric.get_name() + ": " + str(metric_scores[metric.get_name()]))
+
+    clf_metrics = {}
+    for i in range(0, clf_predictions.shape[1]):
+        clf_metrics["clf_" + str(i)] = {}
+        clf_metrics["clf_" + str(i)]["matrix"] = sklearn.metrics.confusion_matrix(test_y, clf_predictions[:, i])
+        clf_metrics["clf_" + str(i)]["acc"] = sklearn.metrics.accuracy_score(test_y, clf_predictions[:, i])
+        clf_metrics["clf_" + str(i)]["b_acc"] = sklearn.metrics.balanced_accuracy_score(test_y, clf_predictions[:, i])
+        clf_metrics["clf_" + str(i)]["mcc"] = sklearn.metrics.matthews_corrcoef(test_y, clf_predictions[:, i])
+        clf_metrics["clf_" + str(i)]["logloss"] = sklearn.metrics.log_loss(test_y, clf_predictions[:, i])
+    clf_metrics["adj"] = {}
+    clf_metrics["adj"]["matrix"] = numpy.asarray(sklearn.metrics.confusion_matrix(test_y, adj_scores)).flatten()
+    clf_metrics["adj"]["acc"] = sklearn.metrics.accuracy_score(test_y, adj_scores)
+    clf_metrics["adj"]["b_acc"] = sklearn.metrics.balanced_accuracy_score(test_y, adj_scores)
+    clf_metrics["adj"]["rec"] = sklearn.metrics.recall_score(test_y, adj_scores)
+    clf_metrics["adj"]["mcc"] = sklearn.metrics.matthews_corrcoef(test_y, adj_scores)
+    clf_metrics["adj"]["logloss"] = sklearn.metrics.log_loss(test_y, adj_scores)
+    clf_metrics["adj"]["best_base_acc"] = max([clf_metrics[k]["acc"] for k in clf_metrics.keys() if k not in ["adj"]])
+    clf_metrics["adj"]["best_base_mcc"] = max([abs(clf_metrics[k]["mcc"]) for k in clf_metrics.keys() if k not in ["adj"]])
+    clf_metrics["adj"]["acc_gain"] = clf_metrics["adj"]["acc"] - clf_metrics["adj"]["best_base_acc"]
+    clf_metrics["adj"]["mcc_gain"] = abs(clf_metrics["adj"]["mcc"]) - clf_metrics["adj"]["best_base_mcc"]
+
+    return metric_scores, clf_metrics
