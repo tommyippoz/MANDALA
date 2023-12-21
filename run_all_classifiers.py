@@ -63,7 +63,7 @@ if __name__ == '__main__':
 
             # Reads CSV Dataset
             x_train, x_test, y_train, y_test, feature_list = \
-                read_csv_dataset(os.path.join(CSV_FOLDER, file), limit=100000, encode=True)
+                read_csv_dataset(os.path.join(CSV_FOLDER, file), limit=100000, encode=True, shuffle=False)
 
             print('--------------------------------------'
                   '\n-------- DATASET ' + str(file) + ' ---------\n')
