@@ -10,7 +10,6 @@ from keras.utils import to_categorical
 from sklearn.metrics import accuracy_score, matthews_corrcoef, confusion_matrix
 
 from mandalalib.classifiers.PDIClassifier import PDIClassifier
-from mandalalib.classifiers.PDITLClassifier import PDITLClassifier
 
 
 class KerasClassifier:

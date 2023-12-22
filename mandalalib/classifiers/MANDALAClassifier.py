@@ -1,9 +1,4 @@
-import contextlib
 import copy
-import logging
-import os
-import sys
-import warnings
 
 import numpy
 import numpy as np
@@ -11,6 +6,7 @@ import pandas
 import pandas as pd
 import sklearn.metrics
 from autogluon.tabular import TabularPredictor
+from pytorch_tabnet.metrics import Metric
 from pytorch_tabnet.tab_model import TabNetClassifier
 from pytorch_tabular import TabularModel
 from pytorch_tabular.config import OptimizerConfig, TrainerConfig, DataConfig
@@ -19,9 +15,6 @@ from pytorch_tabular.models import CategoryEmbeddingModelConfig, GatedAdditiveTr
 from sklearn.linear_model import LogisticRegression
 from sklearn.neighbors import KNeighborsClassifier
 from xgboost import XGBClassifier
-
-
-from pytorch_tabnet.metrics import Metric
 
 
 class MCCTabNet(Metric):

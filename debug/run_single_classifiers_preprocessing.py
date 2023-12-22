@@ -1,26 +1,19 @@
 import copy
 import math
-
-import numpy
-import sklearn.metrics
-
 import os
 
-from pyod.models.cblof import CBLOF
-from pyod.models.copod import COPOD
-from pyod.models.hbos import HBOS
-from pyod.models.iforest import IForest
+import sklearn.metrics
 from sklearn.decomposition import PCA
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.naive_bayes import GaussianNB
-from sklearn.preprocessing import StandardScaler, MinMaxScaler
+from sklearn.preprocessing import MinMaxScaler
 from sklearn.tree import DecisionTreeClassifier
 
 from mandalalib.EnsembleMetric import QStatMetric, SigmaMetric, CoupleDisagreementMetric, DisagreementMetric, \
     SharedFaultMetric
-from mandalalib.classifiers.MANDALAClassifier import TabNet, FastAI, UnsupervisedClassifier, XGB
-from mandalalib.utils.MUtils import read_csv_binary_dataset, get_clf_name, current_ms, read_csv_dataset
+from mandalalib.classifiers.MANDALAClassifier import TabNet, FastAI, XGB
+from mandalalib.utils.MUtils import get_clf_name, current_ms, read_csv_dataset
 
 LABEL_NAME = 'multilabel'
 CSV_FOLDER = "datasets_red"

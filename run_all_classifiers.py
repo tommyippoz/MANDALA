@@ -1,10 +1,7 @@
-import numpy
-import pandas
-import sklearn.metrics
-
 import os
 
-import torch
+import numpy
+import sklearn.metrics
 from joblib import dump
 from logitboost import LogitBoost
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
@@ -15,13 +12,10 @@ from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import MinMaxScaler
 from sklearn.tree import DecisionTreeClassifier
 
-from mandalalib.EnsembleMetric import QStatMetric, SigmaMetric, CoupleDisagreementMetric, DisagreementMetric, \
-    SharedFaultMetric
-from mandalalib.classifiers.MANDALAClassifier import FastAI, XGB, PyTabularClassifier, \
-    LogisticReg
+from mandalalib.classifiers.MANDALAClassifier import XGB, PyTabularClassifier
 from mandalalib.classifiers.PDIClassifier import PDIClassifier
 from mandalalib.classifiers.PDITLClassifier import PDITLClassifier
-from mandalalib.utils.MUtils import read_csv_binary_dataset, get_clf_name, current_ms, read_csv_dataset
+from mandalalib.utils.MUtils import get_clf_name, current_ms, read_csv_dataset
 
 LABEL_NAME = 'multilabel'
 CSV_FOLDER = "datasets_new"
