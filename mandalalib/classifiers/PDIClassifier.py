@@ -27,8 +27,7 @@ class PDIClassifier(MANDALAClassifier):
         self.val_split = val_split
         self.norm_stats = {"train_avg": None, "train_std": None}
         if model is None:
-            model = keras.Sequential(
-                [
+            model = keras.Sequential([
                     keras.layers.Conv2D(filters=8, kernel_size=3, padding='same',
                                         input_shape=(img_size, img_size, 1), activation='relu'),
                     keras.layers.BatchNormalization(),
