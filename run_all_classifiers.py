@@ -15,7 +15,7 @@ from sklearn.tree import DecisionTreeClassifier
 from mandalalib.classifiers.MANDALAClassifier import XGB, PyTabularClassifier
 from mandalalib.classifiers.PDIClassifier import PDIClassifier
 from mandalalib.classifiers.PDITLClassifier import PDITLClassifier
-from mandalalib.utils.MUtils import get_clf_name, current_ms, read_csv_dataset
+from mandalalib.utils.MUtils import get_clf_name, current_ms, read_csv_dataset, entropy
 
 LABEL_NAME = 'multilabel'
 CSV_FOLDER = "datasets_new"
@@ -30,17 +30,6 @@ TAB_CLFS = [XGB(n_estimators=30),
             LogisticRegression(max_iter=10000),
             ExtraTreesClassifier(n_estimators=30),
             LogitBoost(n_estimators=30)]
-
-
-def entropy(probs):
-    norm_array = numpy.full(probs.shape[1], 1 / probs.shape[1])
-    normalization = (-norm_array * numpy.log2(norm_array)).sum()
-    ent = []
-    for i in range(0, probs.shape[0]):
-        val = numpy.delete(probs[i], numpy.where(probs[i] == 0))
-        p = val / val.sum()
-        ent.append(1 - (normalization - (-p * numpy.log2(p)).sum()) / normalization)
-    return numpy.asarray(ent)
 
 
 if __name__ == '__main__':

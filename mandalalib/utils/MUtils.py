@@ -1,8 +1,10 @@
+import copy
 import time
 
 import numpy
 import pandas
 import sklearn
+from sklearn.inspection import permutation_importance
 
 from mandalalib.classifiers.MANDALAClassifier import MANDALAClassifier
 
@@ -190,18 +192,44 @@ def get_clf_name(classifier):
     return clf_name
 
 
-def compute_feature_importances(clf):
+def compute_feature_importances(clf, x_test=None, y_test=None):
     """
     Outputs feature ranking in building a Classifier
     :return: ndarray containing feature ranks
     """
+    fi = []
     if hasattr(clf, 'feature_importances_'):
-        return clf.feature_importances_
+        fi = clf.feature_importances_
     elif hasattr(clf, 'coef_'):
-        return numpy.sum(numpy.absolute(clf.coef_), axis=0)
+        fi = numpy.sum(numpy.absolute(clf.coef_), axis=0)
     elif isinstance(clf, MANDALAClassifier):
-        return clf.compute_feature_importances()
-    return []
+        fi = clf.compute_feature_importances()
+    elif hasattr(clf, 'estimators_') and hasattr(clf.estimators_[0], 'feature_importances_'):
+        l_feat_imp = [sum(cls.feature_importances_ for cls in cls_list)
+                      for cls_list in clf.estimators_]
+        fi = numpy.array(l_feat_imp).sum(0)
+    else:
+        imps = permutation_importance(clf, x_test, y_test)
+        fi = imps.importances_mean
+    return fi / sum(fi)
+
+
+def compute_permutation_feature_importances(clf, x_test, y_test, clf_names, feature_names):
+    """
+    Outputs feature ranking in building a Classifier
+    :return: ndarray containing feature ranks
+    """
+    #imps = permutation_importance(clf, x_test, y_test)
+    #i_values = imps.importances_mean/sum(imps.importances_mean)
+    i_values = compute_feature_importances(clf, x_test, y_test)
+    i_dict = {feature_names[i]: i_values[i] for i in range(len(feature_names))}
+    out_dict = {'dataset_features': sum([i_dict[key] for key in i_dict if 'datasetfeature' in key])}
+    for clf_i in range(0, len(clf_names)):
+        out_dict['clf' + str(clf_i+1) + '_probas'] = \
+            sum([i_dict[key] for key in i_dict if clf_names[clf_i] + '_prob' in key])
+        for tag in ['label', 'maxp', 'ent']:
+            out_dict['clf' + str(clf_i+1) + '_' + tag] = i_dict[clf_names[clf_i] + '_' + tag]
+    return out_dict
 
 
 def report(adj_scores, clf_predictions, test_y, diversity_metrics, verbose=True):
@@ -240,3 +268,90 @@ def report(adj_scores, clf_predictions, test_y, diversity_metrics, verbose=True)
     clf_metrics["adj"]["mcc_gain"] = abs(clf_metrics["adj"]["mcc"]) - clf_metrics["adj"]["best_base_mcc"]
 
     return metric_scores, clf_metrics
+
+
+def entropy(probs):
+    norm_array = numpy.full(probs.shape[1], 1 / probs.shape[1])
+    normalization = (-norm_array * numpy.log2(norm_array)).sum()
+    ent = []
+    for i in range(0, probs.shape[0]):
+        val = numpy.delete(probs[i], numpy.where(probs[i] == 0))
+        p = val / val.sum()
+        ent.append(1 - (normalization - (-p * numpy.log2(p)).sum()) / normalization)
+    return numpy.asarray(ent)
+
+
+def make_dataset_dict(clf_names, dataset_df):
+    dataset_dict = {}
+    for clf_name in clf_names:
+        clf_dict = {'label': dataset_df[clf_name + '_label'].to_numpy(),
+                    'maxp': dataset_df[clf_name + '_maxp'].to_numpy(),
+                    'ent': dataset_df[clf_name + '_ent'].to_numpy(),
+                    'probas': numpy.asarray([dataset_df[x] for x in dataset_df.columns
+                                             if x.startswith(clf_name) and '_prob' in x]).T}
+        dataset_dict[clf_name] = clf_dict
+    return dataset_dict
+
+
+def make_ensemble_prediction(train_clf_dict, test_clf_dict, adj, train_labels=None, use_dataset=None):
+    feat_imp = None
+    meta_clf = None
+    if hasattr(adj, 'fit') and callable(adj.fit):
+        # Stacker
+        meta_clf = copy.deepcopy(adj)
+        train_p = []
+        test_p = []
+        column_names = []
+        for clf in train_clf_dict:
+            clf_data = [train_clf_dict[clf]['probas'], train_clf_dict[clf]['ent'].reshape((-1, 1)),
+                        train_clf_dict[clf]['maxp'].reshape((-1, 1)), train_clf_dict[clf]['label'].reshape((-1, 1))]
+            train_p.append(numpy.concatenate(clf_data, axis=1))
+            clf_data = [test_clf_dict[clf]['probas'], test_clf_dict[clf]['ent'].reshape((-1, 1)),
+                        test_clf_dict[clf]['maxp'].reshape((-1, 1)), test_clf_dict[clf]['label'].reshape((-1, 1))]
+            test_p.append(numpy.concatenate(clf_data, axis=1))
+        train_p = numpy.concatenate(train_p, axis=1)
+        test_p = numpy.concatenate(test_p, axis=1)
+        if use_dataset is not None:
+            t_feat = use_dataset['train']
+            train_p = numpy.concatenate([train_p, t_feat], axis=1)
+            te_feat = use_dataset['test']
+            test_p = numpy.concatenate([test_p, te_feat], axis=1)
+        meta_clf.fit(train_p, train_labels)
+        probas = meta_clf.predict_proba(test_p)
+    elif adj == 'maxp':
+        maxps = numpy.vstack([test_clf_dict[clf]['maxp'] for clf in test_clf_dict]).T
+        best_clf = numpy.asarray(list(test_clf_dict.keys()))[numpy.argmax(maxps, axis=1)]
+        probas = numpy.asarray([test_clf_dict[best_clf[i]]['probas'][i] for i in range(0, len(best_clf))])
+    elif adj == 'best':
+        best_clf = None
+        for clf in train_clf_dict:
+            acc = sklearn.metrics.balanced_accuracy_score(train_clf_dict[clf]['label'], train_labels)
+            if best_clf is None or best_clf[1] < acc:
+                best_clf = [clf, acc]
+        probas = test_clf_dict[best_clf[0]]['probas']
+    else:
+        probas = None
+        for clf in test_clf_dict:
+            if probas is None:
+                probas = copy.deepcopy(test_clf_dict[clf]['probas'])
+            else:
+                probas += test_clf_dict[clf]['probas']
+        probas /= len(test_clf_dict)
+    return {'probas': probas, 'label': numpy.argmax(probas, axis=1),
+            'maxp': numpy.max(probas, axis=1), 'ent': entropy(probas)}, \
+           [meta_clf, test_p] if meta_clf is not None else None
+
+
+def compute_metrics(clf_name, clf_matrix, labels):
+    metrics_dict = {'clf': clf_name}
+    pred = clf_matrix['label']
+    maxp = clf_matrix['maxp']
+    metrics_dict['acc'] = sklearn.metrics.accuracy_score(pred, labels)
+    metrics_dict['b_acc'] = sklearn.metrics.balanced_accuracy_score(pred, labels)
+    metrics_dict['mcc'] = sklearn.metrics.matthews_corrcoef(pred, labels)
+    metrics_dict['avg_conf'] = numpy.average(maxp)
+    metrics_dict['avg_conf_hit'] = numpy.average(maxp[pred == labels])
+    metrics_dict['avg_conf_misc'] = numpy.average(maxp[pred != labels])
+    metrics_dict['test_size'] = len(pred)
+    metrics_dict['n_classes'] = clf_matrix['probas'].shape[1]
+    return metrics_dict

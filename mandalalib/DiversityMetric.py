@@ -138,7 +138,10 @@ class QStatDiversity(DiversityMetric):
 
     def compute_diversity(self, pred1, pred2, test_y):
         n00, n01, n10, n11 = self.compute_n(pred1, pred2, test_y)
-        return (n11*n00 - n01*n10)/(n11*n00 + n01*n10)
+        if n11*n00 + n01*n10 != 0:
+            return (n11*n00 - n01*n10)/(n11*n00 + n01*n10)
+        else:
+            return 0
 
     def get_name(self):
         return "QStat"
@@ -151,7 +154,10 @@ class SigmaDiversity(DiversityMetric):
 
     def compute_diversity(self, pred1, pred2, test_y):
         n00, n01, n10, n11 = self.compute_n(pred1, pred2, test_y, rel=True)
-        return (n11*n00 - n01*n10)/math.sqrt((n11+n10)*(n11+n01)*(n00+n10)*(n00+n01))
+        if (n11+n10)*(n11+n01)*(n00+n10)*(n00+n01) != 0:
+            return (n11*n00 - n01*n10)/math.sqrt((n11+n10)*(n11+n01)*(n00+n10)*(n00+n01))
+        else:
+            return 0
 
     def get_name(self):
         return "Sigma"

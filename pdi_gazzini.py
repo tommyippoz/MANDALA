@@ -10,6 +10,7 @@ from keras.utils import to_categorical
 from sklearn.metrics import accuracy_score, matthews_corrcoef, confusion_matrix
 
 from mandalalib.classifiers.PDIClassifier import PDIClassifier
+from mandalalib.classifiers.PDITLClassifier import PDITLClassifier
 
 
 class KerasClassifier:
@@ -131,18 +132,19 @@ def read_csv_dataset(dataset_name, label_name="multilabel", limit=numpy.nan, spl
         return x_no_cat, y_enc, feature_list
 
 
-DATASETS_DIR = 'datasets_new/a'
+DATASETS_DIR = 'datasets_new'
 
 if __name__ == '__main__':
 
     for file in os.listdir(DATASETS_DIR):
         if file.endswith(".csv"):
-            print("Dataset: " + file)
+            print("Dataset : " + file)
 
             x_train, x_test, y_train, y_test, feature_list = read_csv_dataset(os.path.join(DATASETS_DIR, file),
-                                                                              limit=50000)
+                                                                              limit=10000)
 
-            model = PDIClassifier(n_classes=len(numpy.unique(y_train)), img_size=32, pdi_strategy='tsne',
+            model = PDITLClassifier(n_classes=len(numpy.unique(y_train)), tl_tag='mnist',
+                                    img_size=32, pdi_strategy='tsne',
                                   epochs=50, bsize=128, val_split=0.2, verbose=2)
             model.fit(x_train, y_train)
             y_test_pred = model.predict(x_test)
