@@ -9,7 +9,7 @@ Code for running experiments used in the paper is in the main folder of the repo
 ## Usage
 
 Library implementing a MANDALA classifier is in the 'mandalalib' folder.
-A simple example of how to apply MANDALA classifiers to a sample dataset can be found in this [py file](example_mandalaspec.py) file
+A simple example of how to apply MANDALA classifiers to a sample dataset can be found in this [py file](debug/example_mandalaspec.py) file
 
 ```python
 import numpy

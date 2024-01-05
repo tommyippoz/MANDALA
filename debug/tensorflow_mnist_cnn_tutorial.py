@@ -176,7 +176,7 @@ history = model.fit(x_train, y_train,
 
 model.save('mnist_model.keras')
 
-new_model = tf.keras.models.load_model('mnist_model.keras')
+new_model = tf.keras.models.load_model('../mnist_model.keras')
 
 # Show the model architecture
 new_model.summary()
