@@ -2,7 +2,7 @@
 
 Python Library for building enseMbles for ANomaly Detection in tAbuLar dAta
 
-Repository containing code supprting the submission "Tree-Based and Deep Learning Algorithms: Teaming up for Detecting Errors and Intrusions"
+Repository containing code supprting the submission from ZOppi, Gazzini, Ceccarelli
 
 Code for running experiments used in the paper is in the main folder of the repository. However, datasets are not ours so we cannot directly share them in the reporitory. Please refer to the references in the paper to obtain them.
 
